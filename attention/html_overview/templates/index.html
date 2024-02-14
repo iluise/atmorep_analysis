@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <link rel="stylesheet" href='static/style.css' />
+  <script  src="static/functions.js" type="text/javascript"></script>
+  <script>
+   var selectedBatch = 0;
+   var selectedHead = 0;
+   var concatType = "Mean";
+   var visualType = "BATCH";
+   var field = '{{ f[0] }}';
+   var model_id = '{{ m_id[0] }}';
+   </script>
+</head>
+<body>
+    <div id="dropdown-model">
+        <select id="model-type" onchange="updateModelID()">
+            {% for model in m_id %}
+            <option value= "{{model}}" SELECTED>{{model}}</option>"
+            {% endfor %}
+        </select>
+    </div>
+    <div id="dropdown-field">
+        <select id="field-type" onchange="updateField()">
+            {% for field in f %}
+            <option value= "{{field}}" SELECTED>{{field}}</option>"
+            {% endfor %}
+        </select>
+    </div>
+    <div id="dropdown-batch">
+        <select id="visual-type" onchange="updateVisualType()">
+            <option value="BATCH">Batch View</option>
+            <option value="HEAD">Head View</option>
+            <option value="TIME">Time View</option>
+            <option value="VLEVEL">Level View</option>
+        </select>
+    </div>
+    <div id="dropdown-concat">
+        <select id="concat-type" onchange="updateConcatType()">
+            <option value="Mean">Mean</option>
+            <option value="Single-Token">Single Token</option>
+        </select>
+    </div>
+    <div id="dropdown-attn">
+        <select id="attn-type" onchange="updateAccumType()">
+            <option value="Accum">Accumulated Attention</option>
+            <option value="Last-Layer">Last layer attention</option>
+        </select>
+    </div>
+
+    <div id="buttons">
+        {% for i in range(1, batch_range + 1 ) %}
+            <button style='background-color: rgb({{ 0 }}, {{ (i+2)*15 }}, {{ (i+2)*15 }}, 0.9);' onclick="showSubButtons({{ i }})">Batch {{ i }}</button>
+        {% endfor %}
+    </div>
+
+    <div id="sub-buttons-batch">
+            {% for i in range(1, batch_range + 1 ) %} 
+                 <button style='background-color: rgb({{ 0 }}, {{ (i+2)*15 }}, {{ (i+2)*15 }}, 0.9);' onclick="showImage({{ i }})">Batch {{ i }}</button>
+            {% endfor %}
+    </div>
+
+    <div id="sub-buttons-heads">
+            {% for i in range(1, heads_range + 1 ) %}
+             <button style='background-color: rgb({{ 0 }}, {{ (i+2)*15 }}, {{ (i+2)*15 }}, 0.9);' onclick="showImage({{ i }})">Head {{ i }}</button>
+            {% endfor %}
+    </div>
+
+    <div id="image-display">
+        <img id="image" src="" alt="image">
+    </div>
+
+</body>
+</html>

@@ -1,0 +1,147 @@
+/* image  */
+
+#image-display {
+    display: none;
+    justify-content: center;
+    align-items: center;
+    margin-top: 0px;
+}
+
+img {
+    max-width: 100%;
+    max-height: auto;
+    object-fit: contain;
+}
+
+/* buttons */
+
+#buttons {
+    display: flex;
+    position: absolute;
+    top: 0;
+    margin-top: 50px;
+}
+#sub-buttons-heads {
+    width: 100%;
+    display: flex;
+    justify-content: left;
+    flex-wrap: wrap;
+    margin-top: 125px;
+    display: none;
+}
+
+#sub-buttons-batch {
+    width: 100%;
+    display: flex;
+    justify-content: left;
+    flex-wrap: wrap;
+    margin-top: 125px;
+    display: none;
+}
+
+
+button {
+    width: 65px;
+    height: 65px;
+    margin: 5px;
+    font-family:'Avenir';
+}
+
+/* drop down lists */
+
+#dropdown-model {
+    position: absolute;
+    left: 15px;
+    top: 5px;
+    width: 150px;
+    height: 40px;
+}
+
+#dropdown-field {
+    position: absolute;
+    left: 175px;
+    top: 5px;
+    width: 150px;
+    height: 40px;
+}
+
+#dropdown-batch {
+    position: absolute;
+    left: 335px;
+    top: 5px;
+    width: 150px;
+    height: 40px;
+}
+
+#dropdown-concat {
+    position: absolute;
+    left: 495px;
+    top: 5px;
+    width: 150px;
+    height: 40px;
+}
+
+#dropdown-attn {
+    position: absolute;
+    left: 655px;
+    top: 5px;
+    width: 200px;
+    height: 40px;
+}
+
+#field-type {
+    width: 100%;
+    height: 100%;
+    font-size: 15px;
+    background-color: #E7E7E7;
+    border: none;
+    border-radius: 5px;
+    text-align: center;
+    font-family:'Avenir';
+}
+
+#model-type {
+    display: flex;
+    width: 100%;
+    height: 100%;
+    font-size: 15px;
+    background-color: #E7E7E7; /* #3232d0; */
+    border: none;
+    border-radius: 5px;
+    text-align: center;
+    font-family:'Avenir';
+}
+
+#concat-type {
+    width: 100%;
+    height: 100%;
+    font-size: 15px;
+    background-color: #E7E7E7; 
+    color: black;
+    border: none;
+    border-radius: 5px;
+    text-align: center;
+    font-family:'Avenir';
+}
+#visual-type {
+    display: flex;
+    width: 100%;
+    height: 100%;
+    font-size: 15px;
+    background-color: #E7E7E7; 
+    border: none;
+    border-radius: 5px;
+    text-align: center;
+    font-family:'Avenir';
+}
+#attn-type {
+    width: 100%;
+    height: 100%;
+    font-size: 15px;
+    background-color: #E7E7E7; /* orangered;*/
+    border: none;
+    border-radius: 5px;
+    text-align: center;
+    font-family:'Avenir';
+}
+
