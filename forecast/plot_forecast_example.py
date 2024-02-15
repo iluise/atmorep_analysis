@@ -46,9 +46,7 @@ ds_o['vo'] = (['ml', 'datetime', 'lat', 'lon'], np.zeros( ( nlevels, 6, 721, 144
 all_lats=[]
 all_lons=[]
 for i_str in ds[ f'{field}']:
-  # print(i_str)
   if np.any(ds[ f'{field}/{i_str}/datetime' ][:]  != ds_o['vo'].datetime):
-    # print("different")
     break
   ds_o['vo'].loc[ dict( datetime=ds[ f'{field}/{i_str}/datetime' ][:],
         lat=ds[ f'{field}/{i_str}/lat' ][:],
@@ -59,17 +57,16 @@ cmap = 'RdBu_r'
 vmin, vmax = ds_o['vo'].values[0].min(), ds_o['vo'].values[0].max()
 print(ds_o['datetime'].shape)
 for k in range( 6) :
-  # print("k", k)
   fig = plt.figure( figsize=(10,5), dpi=300)
-#  ax = plt.axes( projection=cartopy.crs.Robinson( central_longitude=0.))
-#  ax.add_feature( cartopy.feature.COASTLINE, linewidth=0.5, edgecolor='k', alpha=0.5)
-#  ax.set_global()
+  ax = plt.axes( projection=cartopy.crs.Robinson( central_longitude=0.))
+  ax.add_feature( cartopy.feature.COASTLINE, linewidth=0.5, edgecolor='k', alpha=0.5)
+  ax.set_global()
   date = ds_o['datetime'].values[k].astype('datetime64[m]')
-  #ax.set_title(f'{field} : {date}')
+  ax.set_title(f'{field} : {date}')
   ds_o['vo'].isel(ml=0, datetime = k).plot.imshow(cmap=cmap, vmin=vmin, vmax=vmax)
-#  im = ax.imshow( np.flip(ds_o['vo'].values[0,k], 0), cmap=cmap, vmin=vmin, vmax=vmax,
-#                  transform=cartopy.crs.PlateCarree( central_longitude=180.))
-  #axins = inset_axes( ax, width="80%", height="5%", loc='lower center', borderpad=-2 )
-  #fig.colorbar( im, cax=axins, orientation="horizontal")
+  im = ax.imshow( np.flip(ds_o['vo'].values[0,k], 0), cmap=cmap, vmin=vmin, vmax=vmax,
+                  transform=cartopy.crs.PlateCarree( central_longitude=180.))
+  axins = inset_axes( ax, width="80%", height="5%", loc='lower center', borderpad=-2 )
+  fig.colorbar( im, cax=axins, orientation="horizontal")
   plt.savefig( f'example_{k:03d}.png')
   plt.close()
