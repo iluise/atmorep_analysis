@@ -38,10 +38,10 @@ models_id  = {
      's4mvp86e': '4 step -> 6h new-training - epoch 1'  #18h
               }
 
-experiment = "temp2" #"pred_6h_fine_tuned_epoch4_5lvl" #"predict_6h"
+experiment = "pred6h"
 input_dir = "/p/scratch/atmo-rep/results/"
 out_dir   = "./figures/forecast/"
-#fields    = ["temperature", "specific_humidity", "velocity_u", "velocity_v"]
+fields    = ["temperature", "specific_humidity", "velocity_u", "velocity_v"]
 #fields    = ["total_precip"]
 metrics   = ["rmse"] #, "acc"]
 levels    = [137, 123]
@@ -49,30 +49,7 @@ pl_levels = {137 : 1000, 123 : 925, 114 : 850, 105 : 700, 96: 500}
 basedir = "/p/scratch/atmo-rep/data/"
 fcst_hours = 6
 
-def rmse_scan(data, model_id, field, level, time_idx):
-    year, month = 2021, 2 #data.datetimes[0].dt.year, data.datetimes[0].dt.month
-    basedir = '/p/fastdata/slmet/slmet111/met_data/ecmwf/era5_reduced_level/ml_levels/'
-    fname = "{}/{}/ml{}/era5_{}_y{}_m{:02d}_ml{}.grib".format(basedir, field, level, field, year, month, level)
-    era5= xr.open_dataset(fname, engine = "cfgrib", backend_kwargs={'time_dims':('valid_time','indexing_time'), "indexpath": ''})[grib_index[field]]
-    era5_all = era5.values.squeeze()
-#    print("era5 all", era5_all.shape)
-    data_ref = data.squeeze()[time_idx].reindex(lat=data.lat[::-1])
-#    print("data", data_ref.shape)
-    rmse = []
-    for idx in range(era5_all.shape[0]):
-        temp = np.sqrt(np.square(data_ref - era5_all[idx]).mean())
-        rmse.append(float(temp.values.squeeze()))
-    rmse_sort = sorted(rmse)
-    #print(rmse.index(rmse_sort[0]), era5.valid_time.values[rmse.index(rmse_sort[0])])
-    #print(rmse_sort[:5], rmse_sort[-5:] )
-    #print(field, [rmse.index(i) for i in rmse_sort[:30]])
-    plt.figure()
-    plt.plot(range(len(rmse)), rmse)
-    plt.savefig(f"figures/rmse_scan_{model_id}_{field}_ml{level}.png")
-    plt.close()
-#        break
 
-    
 pangu = xr.open_dataset("/p/scratch/atmo-rep/data/Pangu-Weather/output_panguweather_6h_forecast_202102.nc", engine= "netcdf4").sel(isobaricInhPa=[pl for pl in pl_levels.values()]).sortby('time')
 print("PanguWeather - opened")
 pangu_plots = []
