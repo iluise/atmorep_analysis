@@ -30,54 +30,57 @@ from utils.read_atmorep_data import HandleAtmoRepData
 from utils.utils import get_pl_level, grib_index
 
 models_id  = {
-     #'1arfi1oi': '10 step -> 6h - no fine-tuning - Paper',
-     '5yyn8vu6': '10 step -> 6h - Paper',
+#     '1arfi1oi': '12 step -> 6h - no fine-tuning - Paper',
+     '5yyn8vu6': '12 step -> 6h - Paper - epoch 45', #36h
+#     'lpfi1lul': '12 step -> 24h new-training - epoch 7',  #36h
 
-     'bp7vm29f': '2 step -> 6h new-training - epoch 4', #12h
-     'c96xrbip': '1 step -> 6h new-training - epoch 4', #9h
-     's4mvp86e': '4 step -> 6h new-training - epoch 1'  #18h
-              }
-
-experiment = "pred6h"
+     'c96xrbip': '1 step -> 6h new-training - epoch 10', #9h
+     'l0cvsqhm': '1 step -> 6h new-training - epoch 15', #9h
+     'bp7vm29f': '2 step -> 6h new-training - epoch 10', #12h
+     'irk7o1op': '4 step -> 6h new-training - epoch 10'  #18h
+#     'su4kfzxv': '4 step -> 12h new-training - epoch 5'  #18h        
+}
+plot_pangu = True #False
+experiment = "pred6h_epoch15" #"pred24h_atmorep_only"
 input_dir = "/p/scratch/atmo-rep/results/"
 out_dir   = "./figures/forecast/"
 fields    = ["temperature", "specific_humidity", "velocity_u", "velocity_v"]
 #fields    = ["total_precip"]
 metrics   = ["rmse"] #, "acc"]
-levels    = [137, 123]
+levels    = [137, 123, 114, 105, 96]
 pl_levels = {137 : 1000, 123 : 925, 114 : 850, 105 : 700, 96: 500}
 basedir = "/p/scratch/atmo-rep/data/"
 fcst_hours = 6
 
+if plot_pangu:
+        pangu = xr.open_dataset("/p/scratch/atmo-rep/data/Pangu-Weather/output_panguweather_6h_forecast_202102.nc", engine= "netcdf4").sel(isobaricInhPa=[pl for pl in pl_levels.values()]).sortby('time')
+        print("PanguWeather - opened")
+        pangu_plots = []
+        pangu_levels = [pl_levels[lvl] for lvl in levels]
 
-pangu = xr.open_dataset("/p/scratch/atmo-rep/data/Pangu-Weather/output_panguweather_6h_forecast_202102.nc", engine= "netcdf4").sel(isobaricInhPa=[pl for pl in pl_levels.values()]).sortby('time')
-print("PanguWeather - opened")
-pangu_plots = []
-pangu_levels = [pl_levels[lvl] for lvl in levels]
+        for fidx, field in enumerate(fields):
+                ds_pangu = pangu.sel(isobaricInhPa=pangu_levels)
+                datetimes_pangu  = ds_pangu.time
+                pangu_fcst_hours = np.sort(np.unique(ds_pangu.step))
+	        #breakpoint()
+                datetimes_era5 = [dt + pd.DateOffset(hours=int(i)) for i in range(1, len(pangu_fcst_hours)+1) for dt in datetimes_pangu.values]
+                era5_pl_name = [f"/p/fastdata/slmet/slmet111/met_data/ecmwf/era5_reduced_level/pl_levels/{pl_levels[lvl]}/{field}/reanalysis_{field}_y2021_m02_pl{pl_levels[lvl]}.grib" for lvl in levels]
+                era5_pl  = xr.concat([xr.open_dataset(fname, engine = "cfgrib", backend_kwargs={"indexpath": ''}).sel(time = datetimes_era5)[grib_index[field]].sortby('time') for fname in era5_pl_name], dim = 'isobaricInhPa').transpose('time', 'isobaricInhPa', 'latitude', 'longitude')
 
-for fidx, field in enumerate(fields):
-    ds_pangu = pangu.sel(isobaricInhPa=pangu_levels)
-    datetimes_pangu = ds_pangu.time
-    #breakpoint()
-    datetimes_era5 = [dt + pd.DateOffset(hours=int(i)) for i in range(1, fcst_hours+1) for dt in datetimes_pangu.values]
-    era5_pl_name = [f"/p/fastdata/slmet/slmet111/met_data/ecmwf/era5_reduced_level/pl_levels/{pl_levels[lvl]}/{field}/reanalysis_{field}_y2021_m02_pl{pl_levels[lvl]}.grib" for lvl in levels]
+                ds_era5 = xr.Dataset( coords={
+	                'time'          : datetimes_pangu,
+	                'step'          : pangu_fcst_hours, #np.sort(np.unique(ds_pangu.step)),
+	                'isobaricInhPa' : pangu_levels,
+	                'latitude'      : era5_pl.latitude.values,
+	                'longitude'     : era5_pl.longitude.values
+	        } )
 
-    era5_pl  = xr.concat([xr.open_dataset(fname, engine = "cfgrib", backend_kwargs={"indexpath": ''}).sel(time = datetimes_era5)[grib_index[field]].sortby('time') for fname in era5_pl_name], dim = 'isobaricInhPa').transpose('time', 'isobaricInhPa', 'latitude', 'longitude')
-    
-    ds_era5 = xr.Dataset( coords={
-        'time'          : datetimes_pangu,
-        'step'          : np.sort(np.unique(ds_pangu.step)),
-        'isobaricInhPa' : pangu_levels,
-        'latitude'      : era5_pl.latitude.values,
-        'longitude'     : era5_pl.longitude.values
-    } )
-
-    ds_era5[grib_index[field]] = (['time', 'step', 'isobaricInhPa', 'latitude', 'longitude'], era5_pl.values.reshape(ds_pangu[grib_index[field]].shape))
-    pangu_scores = np.array(calc_scores_item(ds_pangu[grib_index[field]], ds_era5[grib_index[field]], metrics, ["latitude", "longitude", "time"])).transpose(0, 2, 1)
-    print("shape", pangu_scores.shape)
-    pangu_plots.append(pangu_scores)
-
-
+                ds_era5[grib_index[field]] = (['time', 'step', 'isobaricInhPa', 'latitude', 'longitude'], era5_pl.values.reshape(ds_pangu[grib_index[field]].shape))
+                pangu_scores = np.array(calc_scores_item(ds_pangu[grib_index[field]], ds_era5[grib_index[field]], metrics, ["latitude", "longitude", "time"])).transpose(0, 2, 1)
+                print("shape", pangu_scores.shape)
+                pangu_plots.append(pangu_scores)
+                
+                
 ####### atmorep #######
 plots = np.zeros([len(models_id), len(fields), len(metrics),  len(levels), fcst_hours])
 for mod_idx, (model_id, label) in enumerate(models_id.items()):
@@ -85,10 +88,14 @@ for mod_idx, (model_id, label) in enumerate(models_id.items()):
     for fidx, field in enumerate(fields):
             da_target  = ar_data.read_data(field, "target", ml = levels).sortby('datetime').sel(ml = levels)       
             da_pred    = ar_data.read_data(field, "pred"  , ml = levels).sortby('datetime').sel(ml = levels)
+            #print(da_target.shape)
+            #print(da_pred.shape)
+            #breakpoint()
 #           da_source  = ar_data.read_data(field, "source", ml = level).sortby('datetime').sel(ml = level)
 
             atmorep_scores = np.array(calc_scores_item(da_pred, da_target, metrics, ["lat", "lon"]))
             print(atmorep_scores.shape)
+            #print(calc_scores_item(da_pred, da_target, metrics, ["lat", "lon"])[0][0].datetime.reshape( *atmorep_scores.shape[:2], -1, fcst_hours))
             atmorep_scores = atmorep_scores.reshape( *atmorep_scores.shape[:2], -1, fcst_hours).mean(axis = -2)
             print(atmorep_scores.shape)
             plots[mod_idx,fidx] = atmorep_scores[:]
@@ -108,11 +115,14 @@ for fidx, field in enumerate(fields):
     for lidx, level in enumerate(levels):
         for midx, metric in enumerate(metrics):
             fig1, ax1 = plt.subplots()
-            ax1.plot( list(range(1, fcst_hours+1)), pangu_plots[fidx][midx, lidx], label = "PanguWeather")
+            #if plot_pangu:
+            #    ax1.plot( list(range(1, len(pangu_fcst_hours)+1)), pangu_plots[fidx][midx, lidx], label = "PanguWeather")
             for mod_idx, (model_id, label) in enumerate(models_id.items()):
-              print(plots[mod_idx][fidx][midx, lidx])
-              linestyle = "dashed" if "non fine-tuned" in label else "solid"
-              ax1.plot( list(range(1, fcst_hours+1)), plots[mod_idx][fidx][midx, lidx], label = label, linestyle = linestyle)
+                print(plots[mod_idx][fidx][midx, lidx])
+                linestyle = "dashed" if "non fine-tuned" in label else "solid"
+                ax1.plot( list(range(1, fcst_hours+1)), plots[mod_idx][fidx][midx, lidx], label = label, linestyle = linestyle)
+            if plot_pangu:
+                ax1.plot( list(range(1, len(pangu_fcst_hours)+1)), pangu_plots[fidx][midx, lidx], label = "PanguWeather", color = "black")
             plt.subplots_adjust(right=0.7)
             plt.legend(bbox_to_anchor=(1.04, 1), loc="upper left", frameon= False)
             fig1.savefig(f"test_{metric}_{field}_{level}_{experiment}.png",  bbox_inches="tight")
