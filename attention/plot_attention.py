@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 mpl.rcParams['axes.linewidth'] = 0.1
 import matplotlib.colors as mcolors
 import matplotlib.gridspec as gridspec
+from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 
 #for maps
 import cartopy
@@ -21,83 +22,116 @@ import cartopy.crs as ccrs  #https://scitools.org.uk/cartopy/docs/latest/install
 from cartopy.mpl.ticker import LongitudeFormatter, LatitudeFormatter
 import cartopy.feature as cfeature
 
-from analysis.attention.attention_utils import *
-from analysis.utils.utils import shape_from_str, grib_index
+from attention_utils import *
+from utils.utils import shape_from_str, grib_index
 
-base_dir     = './results/'
-model_id     =  '8x5dnvc9' #'bkkrobb9' #'xsbasstk' #'q7yr6hrj'
+base_dir     = '/p/scratch/atmo-rep/results/'
+model_id     =  '1zq3f5gf' #'8x5dnvc9' #'bkkrobb9' #'xsbasstk' #'q7yr6hrj'
 out_folder   = "./attention_plots/"
-epoch        = 0
-num_samples  = 10
-accumulate   = False
-soft_max     = False
-single_token = True
-  
-##################################
-  
-def plot_accumulated_attention(field, filename, source, idxs_nb):
-  
-  attn = load_attention(filename, mean = True) 
-  print(attn.shape)
-  for batch in range(attn.shape[0]): #local patch
-      fig, axs = plt.subplots(4, 6, figsize=(20, 10)) # Creating a grid of 4 rows and 7 columns
-      for time in range(attn.shape[3]): #time
-        # Extracting the tensor and the attention for the given indices.
-        source_img = source[batch1, 0, time, :, :]
-        attn_img = attn[batch1, 0, time, :, :]
-        add_plot(axs, source_img, attn_img, idx = time, nrows = 4, ncols = 6, title = 'Time')
+tag = "" #if you want to add a particular description to your plots
 
-        sm = "_SM" if soft_max else ""
-      save_plot(fig, name = f"Combined_plot_{model_id}_{field}_batch1_{batch1}_batch2_{batch2}_accum"+("_SM" if soft_max else ""))
-        
-#################################
+#values:
+layer = 0 
+head  = 0
 
-def plot_attention(field, filename, source, idxs_nb):
+#reference coordinates:
+# coordinates of the token to which the attention is referred to for each local patch. 
+rf_lvl  = 0
+rf_time = 0
+rf_lat  = 3
+rf_lon  = 6
 
-  ########## SINGLE TOKEN or AVERAGE ###############
-  
-  if single_token:
-    lvl = 0 #4 #last vertical level (137)
-    time = 0 #first timestep 
-    
-    print(f"Info:: Plotting Attention Maps referred to the Single Token: lvl {lvl}/{num_lvl}, time {time}/{num_tokens[0]}, lat {lat}/{num_tokens[1]}, lon = {lon}/{num_tokens[2]}")
-    attn = []
-    #attn_temp = np.fromfile(f, dtype = np.float32).reshape(shape_from_str(f))
-    #inspect_attention(attn_temp)
-    store = zarr.ZipStore(filename, mode='r')
-    root = zarr.open_group(store)[field]
-    attn_list = []
-    #attn = np.zeros([1488, 16, 2, 12, 6, 12, 2, 12, 6, 12], dtype = np.float32)
+##################################  
+def plot_attention(field, filename, source, idxs_nb, toksize = [12, 6, 12]):
 
-    attn = load_attention(filename, field, stack = False, mean = False)[:, :, lvl,time,lat,lon,:,:,:,:]
-    print(attn.shape)
-  else: 
-    print("Info:: Computing the Mean across tokens.")
-    attn = load_attention(filename, stack = True, mean = True) 
-    print(attn.shape)
-    #attn = attn.reshape([attn.shape[0], num_heads, attn.shape[0], num_lvl, num_tokens[0], num_tokens[1], num_tokens[2]])
-    #print(attn.shape)
-    
+  ########## LOAD ALL HEADS ##############
+  attn = load_attention(filename, field)
   print("Info:: Start plotting.")
+  print(attn.info)
+  temp = get_layer(attn, batch = idxs_nb, layer = layer)
+  datetime = temp["datetime"]
+  ml = temp["ml"]
 
-  label = model_id + ("_ST" if single_token else "" ) + ("_SM" if soft_max else "")
+  ds_o = xr.Dataset( coords={ 'ml': ml,  
+                              'datetime': np.unique(datetime),
+                              'lat' : np.linspace( 0., 180., num=81, endpoint=True),
+                              #'lat' : np.linspace( -90., 90., num=81, endpoint=True),
+                              'lon' : np.linspace( 0., 360., num=160, endpoint=False) } )
 
-  ########### PLOT x BATCH ###############
-  plot_vs_batch_number(field, source, attn, label)
+  ds_o[grib_index[field]] = (['ml', 'datetime', 'lat', 'lon'], np.zeros( ( len(ml), toksize[0], 81, 160)))
+
+  #TO-DO: skipping the last batch since it's problematic
+  for b1 in range(idxs_nb, idxs_nb + datetime.shape[0]-1):
+    temp = get_head(attn, batch = b1, layer = layer, head = head)
+    lat, lon = get_lat_lon(attn, batch = b1, layer = layer)
+    temp = temp.reshape(*temp.shape[:3], toksize[1], toksize[2], *temp.shape[-3:-1], toksize[1], toksize[2])
+    for b in range(datetime.shape[0]):
+      ds_o[grib_index[field]].loc[ dict(
+                           datetime = datetime[b], 
+                           lat=lat[b],
+                           lon=lon[b]) ] = temp[b, rf_lvl, rf_time, rf_lat, rf_lon]
+
+  print(ds_o)
+  cmap='PuBuGn'
+  #  ########### PLOT x TIME ###############
+  data = ds_o[grib_index[field]].isel(ml = rf_lvl)
+  vmin, vmax = data.min(), data.max()
+  for k in range(datetime.shape[1]):
+    fig = plt.figure( figsize=(10,5), dpi=300)
+    ax = plt.axes( projection=cartopy.crs.Robinson( central_longitude=0.))
+    ax.add_feature( cartopy.feature.COASTLINE, linewidth=0.5, edgecolor='k', alpha=0.5)
+    ax.set_global()
+    date = ds_o['datetime'].values[k].astype('datetime64[m]')
+    ax.set_title(f'{field} : {date}')
+    data.isel(datetime = k).plot.imshow(cmap=cmap, vmin=vmin, vmax=vmax)
+    #    im = ax.imshow( np.flip(ds_o[grib_index[field]].values[rf_lvl, k], 0), cmap=cmap, vmin=vmin, vmax=vmax,
+    im = ax.imshow( data.isel(datetime = k), cmap=cmap, vmin=vmin, vmax=vmax,
+                    transform=cartopy.crs.PlateCarree( central_longitude=180.))
+    axins = inset_axes( ax, width="80%", height="5%", loc='lower center', borderpad=-2 )
+    fig.colorbar( im, cax=axins, orientation="horizontal")
+    plt.savefig( f'example_{field}_time_{k:03d}.png')
+    plt.close()
+
+  #  ########### PLOT x LEVEL ###############
+  print("print per level")
+  data = ds_o[grib_index[field]].isel(datetime = rf_time)
+  vmin, vmax = data.min(), data.max()
+  for k in range(len(data["ml"])):
+    fig = plt.figure( figsize=(10,5), dpi=300)
+    ax = plt.axes( projection=cartopy.crs.Robinson( central_longitude=0.))
+    ax.add_feature( cartopy.feature.COASTLINE, linewidth=0.5, edgecolor='k', alpha=0.5)
+    ax.set_global()
+    level = ds_o['ml'].values[k]
+    date = ds_o['datetime'][rf_time].astype('datetime64[m]')
+    ax.set_title(f'{field} : level {level} - {date} ')
+    data.isel(ml = k).plot.imshow(cmap=cmap, vmin=vmin, vmax=vmax)
+    #    im = ax.imshow( np.flip(ds_o[grib_index[field]].values[rf_lvl, k], 0), cmap=cmap, vmin=vmin, vmax=vmax,
+    im = ax.imshow( data.isel(ml = k), cmap=cmap, vmin=vmin, vmax=vmax,
+                    transform=cartopy.crs.PlateCarree( central_longitude=180.))
+    axins = inset_axes( ax, width="80%", height="5%", loc='lower center', borderpad=-2 )
+    fig.colorbar( im, cax=axins, orientation="horizontal")
+    plt.savefig( f'example_{field}_lvl_{k:03d}.png')
+    plt.close()
   
-  ############# PLOT x LEVEL #################
-  plot_vs_vertical_level(field, source, attn, label)
-  
-  ############ PLOT x TIME STEP ################
-  plot_vs_time_step(field, source, attn, label)
-  
-  ############## PLOT x HEADS ###################
-  plot_vs_head_number(field, source, attn, label)
+#  ########### PLOT x BATCH ###############
+#  label = f"lyr{layer}_h{head}_lvl{level}_t{time}"
+#  if tag != "":
+#    label = tag+ "_" + label
+#  plot_vs_batch_number(out_folder, field, source, temp, label)
+#  
+#  ############# PLOT x LEVEL #############
+#  plot_vs_vertical_level(field, source, attn, label, mode)
+#  
+#  ############ PLOT x TIME STEP ##########
+#  plot_vs_time_step(field, source, attn, label, mode)
+#  
+#  ############## PLOT x HEADS ############
+#  plot_vs_head_number(field, source, attn, label, mode)
 
   return 0
 
   
-###################################################################3            
+##########################################
 
 def main():
   bname = base_dir + '/id' + model_id + '/'
@@ -105,7 +139,7 @@ def main():
   with open( bname + '/model_id'+ model_id + '.json') as json_file:
     config = json.load(json_file)
   
-  print(config)
+#  print(config)
   num_heads = config["encoder_num_heads"]
   
   # output
@@ -117,38 +151,37 @@ def main():
 
   cat = np.concatenate
   f32 = np.float32
-  print("Info:: Accumulate  = ", accumulate)
-  print("Info:: Soft Max    = ", soft_max  )
-  if soft_max:
-    print("Warning:: the soft max implementation is not exactly as in the code. A normalisation will be applied for better visualisation.")
 
   for ifield, field_info in enumerate(config['fields']) :
 
     field = field_info[0]
+
+    if field == "temperature" or field == "total_precip":
+      continue
+    
     print( 'Info:: Processing {}.'.format( field ) )
 
     # source
-    fname_source = glob.glob(base_dir +'/id'+ model_id +'/*source*.zarr')[0]
-    store = zarr.ZipStore(fname_source, mode='r')
-    root_source = zarr.open_group(store)[field]
-    source = []
-    for name, sample in root_source.groups():
-      source_temp = sample.data[:]
-      source.append(source_temp)
-    source = np.array(source)
-    print( 'Info:: source : {}'.format( source.shape ) )
-
-    rng = np.random.default_rng()
-    idxs_nb = rng.permutation( source.shape[0] )[:num_samples]
-    source = source[idxs_nb, :]
-    print(source.shape)
+#   fname_source = glob.glob(base_dir +'/id'+ model_id +'/*source*.zarr')[0]
+#   store = zarr.ZipStore(fname_source, mode='r')
+#   root_source = zarr.open_group(store)[field]
+#   source = []
+#   for name, sample in root_source.groups():
+#     source_temp = sample.data[:]
+#     source.append(source_temp)
+#   source = np.array(source)
+#   print( 'Info:: source : {}'.format( source.shape ) )
+#
+#   rng = np.random.default_rng()
+#   idxs_nb = rng.permutation( source.shape[0] )[:num_samples]
+#   source = source[idxs_nb, :]
+#   print(source.shape)
+#
+    source = None
+    idx_nb = 0 #list(range(10))
     #attention file
     filename = glob.glob(base_dir +'/id'+ model_id +'/*attention*.zarr')[0]
-    
-    if accumulate:
-      plot_accumulated_attention(field, filename, source, idxs_nb)
-    else:
-      plot_attention(field, filename, source, idxs_nb)
+    plot_attention(field, filename, source, idx_nb)
     
 if __name__ == '__main__':
   main()
