@@ -14,7 +14,6 @@ import matplotlib.pyplot as plt
 mpl.rcParams['axes.linewidth'] = 0.1
 import matplotlib.colors as mcolors
 import matplotlib.gridspec as gridspec
-from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 
 #for maps
 import cartopy
@@ -54,7 +53,7 @@ def plot_attention(field, filename, toksize = [12, 6, 12]):
 
   #loop over lead times
   #TO-DO: remove num_batches_per_global
-  for idx_nb in range(np.floor(len(attn.keys()) / num_batches_per_global)): 
+  for idx_nb in range(int(len(attn.keys()) / num_batches_per_global)): 
     batch = idx_nb*num_batches_per_global
     ar.set_tag(tag+f"_batch{batch:05d}")
     temp = ar.get_layer(attn, batch = batch, layer = rf_layer)
@@ -88,11 +87,12 @@ def plot_attention(field, filename, toksize = [12, 6, 12]):
   
   return 0
 
-def compare_to_source(field, filename, source, idx_nb, toksize = [12, 6, 12]):
+def compare_to_source(field, filename, toksize = [12, 6, 12]):
 
   # source
-  fname_source = glob.glob(base_dir +'/id'+ model_id +'/*source*.zarr')[0]
-  if fname_source != None:
+  fname_source = glob.glob(base_dir +'/id'+ model_id +'/*source*.zarr')
+  if fname_source != []:
+    fname_source = fname_source[0]
     store = zarr.ZipStore(fname_source, mode='r')
     root_source = zarr.open_group(store)[field]
     rng = np.random.default_rng()
@@ -161,7 +161,7 @@ def main():
     filename = glob.glob(base_dir +'/id'+ model_id +'/*attention*.zarr')[0]
         
     #plot 2D maps
-    plot_attention(field, filename, toksize)
+    #plot_attention(field, filename, toksize)
 
     #plot single examples vs source
     compare_to_source(field, filename, toksize)

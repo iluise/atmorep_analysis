@@ -24,6 +24,7 @@ import cartopy.feature as cfeature
 
 from utils.utils import shape_from_str, grib_index
 from utils.read_atmorep_data import HandleAtmoRepData
+from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 
 class HandleAtmoRepAttention(object):
   """
@@ -31,17 +32,17 @@ class HandleAtmoRepAttention(object):
     TODO:
     - fix latitude issue in last batch item 
     """
-  def __init__(self, field: str, out_folder: str, tag: str, rf_dict : dict, verbose = False, official_cmap = 'PuBuGn'):
+  def __init__(self, field: str, out_folder: str, tag: str, rf_dict : dict, verbose = False, cmap = 'PuBuGn'):
 
-    self.field         = field
-    self.out_folder    = out_folder
-    self.tag           = tag
-    self.rf_lvl        = rf_dict["lvl"]
-    self.rf_time       = rf_dict["time"]
-    self.rf_lat        = rf_dict["lat"]
-    self.rf_lon        = rf_dict["lon"]
-    self.verbose       = verbose
-    self.official_cmap = official_cmap
+    self.field      = field
+    self.out_folder = out_folder
+    self.tag        = tag
+    self.rf_lvl     = rf_dict["lvl"]
+    self.rf_time    = rf_dict["time"]
+    self.rf_lat     = rf_dict["lat"]
+    self.rf_lon     = rf_dict["lon"]
+    self.verbose    = verbose
+    self.cmap       = cmap
   
   def inspect_attention(attn):
     print(type(attn))
@@ -101,7 +102,7 @@ class HandleAtmoRepAttention(object):
     
   def save_plot(self, fig, name):
     # Adjusting the layout to avoid overlapping of labels and images.
-    fig.tight_layout()
+    #fig.tight_layout()
     
     # Saving each figure as a separate file.
     fig.savefig(f'{self.out_folder}/{name}.png')
@@ -125,13 +126,12 @@ class HandleAtmoRepAttention(object):
       level = ds['ml'].values[k]
       date = ds['datetime'][self.rf_time].astype('datetime64[m]')
       ax.set_title(f'{self.field} : level {level} - {date} ')
-      data.isel(ml = k).plot.imshow(cmap=cmap, vmin=vmin, vmax=vmax)
-      #    im = ax.imshow( np.flip(ds_o[grib_index[field]].values[rf_lvl, k], 0), cmap=cmap, vmin=vmin, vmax=vmax,
-      im = ax.imshow( data.isel(ml = k), cmap=cmap, vmin=vmin, vmax=vmax,
+      data.isel(ml = k).plot.imshow(cmap=self.cmap, vmin=vmin, vmax=vmax)
+      #    im = ax.imshow( np.flip(ds[grib_index[field]].values[rf_lvl, k], 0), cmap=cmap, vmin=vmin, vmax=vmax,
+      im = ax.imshow( data.isel(ml = k), cmap=self.cmap, vmin=vmin, vmax=vmax,
                       transform=cartopy.crs.PlateCarree( central_longitude=180.))
       axins = inset_axes( ax, width="80%", height="5%", loc='lower center', borderpad=-2 )
-      fig.colorbar( im, cax=axins, orientation="horizontal")
-      save_plot(fig, name = f"Combined_plot_VLEVEL_{self.tag}_{self.field}_level_{k}")
+      self.save_plot(fig, name = f"Combined_plot_VLEVEL_{self.tag}_{self.field}_level_{k}")
 
     #################################
 
@@ -145,15 +145,14 @@ class HandleAtmoRepAttention(object):
       ax = plt.axes( projection=cartopy.crs.Robinson( central_longitude=0.))
       ax.add_feature( cartopy.feature.COASTLINE, linewidth=0.5, edgecolor='k', alpha=0.5)
       ax.set_global()
-      date = ds_o['datetime'].values[k].astype('datetime64[m]')
-      ax.set_title(f'{self, field} : {date}')
-      data.isel(datetime = k).plot.imshow(cmap=cmap, vmin=vmin, vmax=vmax)
-      #    im = ax.imshow( np.flip(ds_o[grib_index[field]].values[rf_lvl, k], 0), cmap=cmap, vmin=vmin, vmax=vmax,
-      im = ax.imshow( data.isel(datetime = k), cmap=cmap, vmin=vmin, vmax=vmax,
+      date = ds['datetime'].values[k].astype('datetime64[m]')
+      ax.set_title(f'{self.field} : {date}')
+      data.isel(datetime = k).plot.imshow(cmap=self.cmap, vmin=vmin, vmax=vmax)
+      #    im = ax.imshow( np.flip(ds[grib_index[field]].values[rf_lvl, k], 0), cmap=cmap, vmin=vmin, vmax=vmax,
+      im = ax.imshow( data.isel(datetime = k), cmap=self.cmap, vmin=vmin, vmax=vmax,
                       transform=cartopy.crs.PlateCarree( central_longitude=180.))
       axins = inset_axes( ax, width="80%", height="5%", loc='lower center', borderpad=-2 )
-      fig.colorbar( im, cax=axins, orientation="horizontal")
-      save_plot(fig, name = f"Combined_plot_TIME_{self.tag}_{self.field}_time_{k:03d}")
+      self.save_plot(fig, name = f"Combined_plot_TIME_{self.tag}_{self.field}_time_{k:03d}")
       
   #################################
 
