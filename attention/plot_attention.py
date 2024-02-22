@@ -25,23 +25,24 @@ from attention_utils import HandleAtmoRepAttention
 from utils.utils import shape_from_str, grib_index
 
 base_dir     = '/p/scratch/atmo-rep/results/'
-model_id     =  '1zq3f5gf' #'8x5dnvc9' #'bkkrobb9' #'xsbasstk' #'q7yr6hrj'
+#model_id     = 'ehsjzkbh' #big run
+model_id     = '1zq3f5gf' #'8x5dnvc9' #'bkkrobb9' #'xsbasstk' #'q7yr6hrj'
 out_folder   = "./attention_plots/"
-tag = f"{model_id}_test" #modify it if you want to add a particular description to your plots
+tag          = model_id+"_test" #modify it if you want to add a particular description to your plots
 
 #TO-DO: automatize this
 num_batches_per_global = 14
-
-#layer and head number to plot:
-rf_layer = 0
-rf_head  = 0
-
+rng = np.random.default_rng()
+  
 #reference coordinates:
 #coordinates of the token to which the attention is referred to for each local patch. 
-rf_dict = {"lvl" : 0,
-           "time": 0,
-           "lat" : 3,
-           "lon" : 6}
+rf_dict = {"head" : 0, #--> the plots (unless when plottig as a function of the heads) refer to this head
+           "layer": 0, #--> the plots refer to this layer
+           
+           "lvl" : 0,  #--> reference level
+           "time": 0,  #--> reference time
+           "lat" : 3,  #--> reference latitude
+           "lon" : 6}  #--> reference longitude
 
 ##################################  
 def plot_attention(field, filename, toksize = [12, 6, 12]):
@@ -56,20 +57,20 @@ def plot_attention(field, filename, toksize = [12, 6, 12]):
   for idx_nb in range(int(len(attn.keys()) / num_batches_per_global)): 
     batch = idx_nb*num_batches_per_global
     ar.set_tag(tag+f"_batch{batch:05d}")
-    temp = ar.get_layer(attn, batch = batch, layer = rf_layer)
+    temp = ar.get_layer(attn, batch = batch, layer = rf_dict["layer"])
     datetime = temp["datetime"]
     ds_o = xr.Dataset( coords={ 'ml': temp["ml"],  
                                 'datetime': np.unique(datetime),
                                 'lat' : np.linspace( 0., 180., num=81, endpoint=True),
                                 #'lat' : np.linspace( -90., 90., num=81, endpoint=True),
                                 'lon' : np.linspace( 0., 360., num=160, endpoint=False) } )
-    
     ds_o[grib_index[field]] = (['ml', 'datetime', 'lat', 'lon'], np.zeros( ( len(temp["ml"]), toksize[0], 81, 160)))
+
     
     #TO-DO: skipping the last batch since it's problematic - Fix it
     for b1 in range(batch, batch + datetime.shape[0]-1):
-      lat, lon = ar.get_lat_lon(attn, batch = b1, layer = rf_layer)
-      temp = ar.get_head(attn, batch = b1, layer = rf_layer, head = rf_head)
+      lat, lon = ar.get_lat_lon(attn, batch = b1, layer = rf_dict["layer"])
+      temp = ar.get_head(attn, batch = b1, layer = rf_dict["layer"], head = rf_dict["head"])
       temp = temp.reshape(*temp.shape[:3], toksize[1], toksize[2], *temp.shape[-3:-1], toksize[1], toksize[2])
       for b in range(datetime.shape[0]):
         ds_o[grib_index[field]].loc[ dict(datetime = datetime[b], 
@@ -87,54 +88,58 @@ def plot_attention(field, filename, toksize = [12, 6, 12]):
   
   return 0
 
-def compare_to_source(field, filename, toksize = [12, 6, 12]):
+def compare_to_source(field, filename, toksize = [12, 6, 12], num_samples = 2):
 
-  # source
+  # get source if available
   fname_source = glob.glob(base_dir +'/id'+ model_id +'/*source*.zarr')
   if fname_source != []:
     fname_source = fname_source[0]
     store = zarr.ZipStore(fname_source, mode='r')
     root_source = zarr.open_group(store)[field]
-    rng = np.random.default_rng()
     rnd_samples = rng.permutation(len(root_source.keys()))[:num_samples]
-    #   source = source[idxs_nb, :]
-    #   print(source.shape)
+    source = [root_source[f'/{field}/sample={rnd:05d}/'].data[:, ::3] for rnd in rnd_samples]
+    print (source[0].shape)
   else:
-    rnd_samples = rng.permutation(len(14))[:num_samples]
+    rnd_samples = rng.permutation(num_batches_per_global**2)[:num_samples] #get random samples from first day only: TO-DO - improve this
     source = None
 
   #attention
   ar = HandleAtmoRepAttention(field, out_folder, tag, rf_dict)
-  attn = ar.load_attention(filename)
+  ds_att = ar.load_attention(filename)
   print("Info:: Start creating the dataset.")
-  print(attn.info)
+  print(ds_att.info)
 
   #default shape
+  attn = []
   for idx_nb in rnd_samples:
     print("Info:: processing random sample number: ", idx_nb)
-    temp = ar.get_layer(attn, batch = idx_nb, layer = rf_layer)
+    ext_loop = int(np.floor(idx_nb / num_batches_per_global))
+    int_loop = int(idx_nb % num_batches_per_global)
+    temp = ar.get_layer(ds_att, batch = ext_loop, layer = rf_dict["layer"])
     nheads = len(temp["heads"].keys())
-    nbatch = temp["datetimes"].shape[1]
+    nbatch = temp["datetime"].shape[0]
     nlevel = temp.ml.shape[0]
-    attn_data = np.zeros( ( nheads, nbatch, nlevel, *toksize))
+    attn_data = np.zeros( ( nheads, nlevel, *toksize))
     
     #retrieve all heads for the given sample
     for head in range( nheads):
-      temp = ar.get_head(attn, batch = idx_nb, layer = rf_layer, head = head)
-      temp = temp.reshape(*temp.shape[:3], toksize[1], toksize[2], *temp.shape[-3:-1], toksize[1], toksize[2])
-      temp = temp[:, rf_dict["lvl"], rf_dict["time"], rf_dict["lat"], rf_dict["lon"]]
+      temp = ar.get_head(ds_att, batch = ext_loop, layer = rf_dict["layer"], head = head)[int_loop] #get the specific local sample
+      temp = temp.reshape(*temp.shape[:2], toksize[1], toksize[2], *temp.shape[-3:-1], toksize[1], toksize[2])
+      temp = temp[rf_dict["lvl"], rf_dict["time"], rf_dict["lat"], rf_dict["lon"]]
       attn_data[head] = temp
-  
+    attn.append(attn_data)
+
   print("Info:: Start plotting.")
   
   ############# PLOT x LEVEL #############
-#  ar.plot_vs_vertical_level(ds_o)
-#
-#  ############ PLOT x TIME STEP ##########
-#  ar.plot_vs_time_step(ds_o)
-#    
-#  ############ PLOT x TIME STEP ##########
-#  ar.plot_vs_head_number(ds_o)
+  ar.compare_levels(attn, source, rnd_samples)
+
+  ############ PLOT x TIME STEP ##########
+  ar.compare_time(attn, source, rnd_samples)
+
+  ############ PLOT x HEAD NUMBER ########
+  ar.compare_heads(attn, source, rnd_samples)
+
   
 ##########################################
 
@@ -161,7 +166,7 @@ def main():
     filename = glob.glob(base_dir +'/id'+ model_id +'/*attention*.zarr')[0]
         
     #plot 2D maps
-    #plot_attention(field, filename, toksize)
+    plot_attention(field, filename, toksize)
 
     #plot single examples vs source
     compare_to_source(field, filename, toksize)

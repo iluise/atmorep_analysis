@@ -37,6 +37,8 @@ class HandleAtmoRepAttention(object):
     self.field      = field
     self.out_folder = out_folder
     self.tag        = tag
+    self.rf_head    = rf_dict["head"]
+    self.rf_layer   = rf_dict["layer"]
     self.rf_lvl     = rf_dict["lvl"]
     self.rf_time    = rf_dict["time"]
     self.rf_lat     = rf_dict["lat"]
@@ -75,34 +77,7 @@ class HandleAtmoRepAttention(object):
 
   #################################
 
-  def add_plot(self, axs, source_img, attn_img, idx, nrows, ncols, title):
-    
-    if source_img != None:
-      # Determine the row and column indices for the subplots.
-      row = idx // ncols
-      col = idx % ncols
-      
-      # Plotting the source image on the first and third rows.
-      axs[row*2, col].imshow(source_img, cmap='PuBuGn')
-      axs[row*2, col].set_title(f'Source Image {idx+1}')
-      axs[row*2, col].axis('off')
-      
-      # Plotting the attention image on the second and fourth rows.
-      axs[row*2 + 1, col].imshow(attn_img, cmap='PuBuGn')
-      axs[row*2 + 1, col].set_title(f'Attention {title} {idx+1}')
-      axs[row*2 + 1, col].axis('off')
-    else:
-      axs.ravel()[idx].imshow(attn_img, cmap='PuBuGn')
-      axs.ravel()[idx].set_title(f'Attention {title} {idx+1}')
-      axs.ravel()[idx].axis('off')
-      
-    return axs
-    
-  #################################
-    
   def save_plot(self, fig, name):
-    # Adjusting the layout to avoid overlapping of labels and images.
-    #fig.tight_layout()
     
     # Saving each figure as a separate file.
     fig.savefig(f'{self.out_folder}/{name}.png')
@@ -131,7 +106,7 @@ class HandleAtmoRepAttention(object):
       im = ax.imshow( data.isel(ml = k), cmap=self.cmap, vmin=vmin, vmax=vmax,
                       transform=cartopy.crs.PlateCarree( central_longitude=180.))
       axins = inset_axes( ax, width="80%", height="5%", loc='lower center', borderpad=-2 )
-      self.save_plot(fig, name = f"Combined_plot_VLEVEL_{self.tag}_{self.field}_level_{k}")
+      self.save_plot(fig, name = f"Plot_VLEVEL_{self.tag}_{self.field}_level_{k}")
 
     #################################
 
@@ -152,40 +127,104 @@ class HandleAtmoRepAttention(object):
       im = ax.imshow( data.isel(datetime = k), cmap=self.cmap, vmin=vmin, vmax=vmax,
                       transform=cartopy.crs.PlateCarree( central_longitude=180.))
       axins = inset_axes( ax, width="80%", height="5%", loc='lower center', borderpad=-2 )
-      self.save_plot(fig, name = f"Combined_plot_TIME_{self.tag}_{self.field}_time_{k:03d}")
+      self.save_plot(fig, name = f"Plot_TIME_{self.tag}_{self.field}_time_{k:03d}")
       
   #################################
 
-  def plot_vs_head_number(field, source, attn, label, mode = "accum", verbose = False):
-    print("Info:: Start plotting as a function of the Head number.")
-    for batch1 in range(attn.shape[0]):
-      #    for batch2 in range(attn.shape[2]):
-      # Create a gridspec to control the layout
+  def add_plot(self, axs, source_img, attn_img, idx, nrows, ncols, title):
+
+    if source_img is None:
+      axs.ravel()[idx].imshow(attn_img, cmap='PuBuGn')
+      axs.ravel()[idx].set_title(f'Attention {title} {idx+1}')
+      axs.ravel()[idx].axis('off')
+    else:
+      # Determine the row and column indices for the subplots.
+      row = idx // ncols
+      col = idx % ncols
+
+      # Plotting the source image on the first and third rows.
+      axs[row*2, col].imshow(source_img, cmap='PuBuGn')
+      axs[row*2, col].set_title(f'Source Image {idx+1}')
+      axs[row*2, col].axis('off')
+
+      # Plotting the attention image on the second and fourth rows.
+      axs[row*2 + 1, col].imshow(attn_img, cmap='PuBuGn')
+      axs[row*2 + 1, col].set_title(f'Attention {title} {idx+1}')
+      axs[row*2 + 1, col].axis('off')
+
+    return axs
+
+  #################################
+
+  def compare(self, attn: list , source: list, axis: str ):
+    if source is not None:
+      assert len(source) == len(attn), "Error: source and attention do not have the same length."
+
+      if axis == 'heads':
+        self._compare_heads(attn, source)
+      elif axis == 'time':
+        self._compare_time(attn, source)
+      elif axis == 'level':
+        self._compare_level(attn, source)
+          
+  def compare_heads(self, attn, source, samples):
+    if source is not None:
+      assert len(source) == len(attn), "Error: source and attention do not have the same length."
+      
+    for idx_nb, sample in enumerate(samples):
       fig = plt.figure(figsize=(16, 20))
       gs = gridspec.GridSpec(6, 4)
       
       # Add the source image at the top, now twice as large
-      source_ax = fig.add_subplot(gs[0:2, :])
-      source_img = source[batch1, 0, 0, :, :]
-      source_ax.imshow(source_img, cmap='PuBuGn')
-      source_ax.set_title('Source Image', fontsize=16)
-      source_ax.axis('off')
-      
+      if source is not None:
+        source_ax = fig.add_subplot(gs[0:2, :])
+        source_img = source[idx_nb][self.rf_lvl, self.rf_time, :, :]
+        source_ax.imshow(source_img, cmap='PuBuGn')
+        source_ax.set_title('Source Image', fontsize=16)
+        source_ax.axis('off')
+        
       # Add each of the attention images in a 4x4 grid beneath the source image
-      for head in range(attn.shape[1]):
-        ax = fig.add_subplot(gs[head // 4 + 2, head % 4])  # start from the third row
-        att_img = attn[batch1, head, batch2, 0, 0, :, :]
-        if soft_max:
-          att_img = compute_softmax(att_img)
+      #TO-DO: avoid hardcoding 
+      X = 2 if source is not None else 0 # start from the third row in case there is source. 
+      for head in range(attn[idx_nb].shape[0]):
+        ax = fig.add_subplot(gs[head // 4 + X, head % 4])  # start from the third row
+        att_img = attn[idx_nb][head, self.rf_lvl, self.rf_time, :, :]
         ax.imshow(att_img, cmap='PuBuGn')
         ax.set_title(f'Attention Head {head+1}')
         ax.axis('off')
+      self.save_plot(fig, name = f'Compare_plot_HEADS_{self.tag}_{self.field}_sample{sample}')
 
-      # Save the figure
-      plt.savefig(f'{out_folder}/{field}Combined_plot_HEADS_{label}_batch1_{batch1}_batch2_{batch2}.png')
-
-      # Close the figure to free memory
-      plt.close(fig)
-      if verbose:
-        print(f'Info:: Figure saved in {out_folder}/{field}Combined_plot_HEADS_{label}_batch1_{batch1}_batch2_{batch2}.png')
+  def compare_time(self, attn, source, samples):
+    if source is not None:
+      assert len(source) == len(attn), "Error: source and attention do not have the same length."
       
+    for idx_nb, sample in enumerate(samples):
+      #TO-DO: avoid hardcoding here
+      fig, axs = plt.subplots(4, 6, figsize=(20, 10))
+      for ax in axs.ravel():
+        ax.set_axis_off()
+        
+      for t in range(attn[idx_nb].shape[2]):
+        source_img = source[idx_nb][self.rf_lvl, t, :, :] if source is not None else None
+        att_img = attn[idx_nb][self.rf_head, self.rf_lvl, t, :, :]
+        self.add_plot(axs, source_img, att_img, idx = t, nrows = 4, ncols = 6, title = 'Time')
+
+      self.save_plot(fig, name = f"Compare_plot_TIME_{self.tag}_{self.field}_t{t}_sample{sample}")
+
+
+  def compare_levels(self, attn, source, samples):
+    if source is not None:
+      assert len(source) == len(attn), "Error: source and attention do not have the same length."
+      
+    for idx_nb, sample in enumerate(samples):
+      #TO-DO: avoid hardcoding here
+      fig, axs = plt.subplots(2, 5, figsize=(20, 10))
+      for ax in axs.ravel():
+        ax.set_axis_off()
+
+      for lvl in range(attn[idx_nb].shape[1]):
+        source_img = source[idx_nb][lvl, self.rf_time, :, :] if source != None else None
+        att_img = attn[idx_nb][self.rf_head, lvl, self.rf_time, :, :]
+        self.add_plot(axs, source_img, att_img, idx = lvl, nrows = 2, ncols = 5, title = 'Level')
+
+      self.save_plot(fig, name = f"Compare_plot_LEVEL_{self.tag}_{self.field}_lvl{lvl}_sample{sample}")
