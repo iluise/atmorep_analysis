@@ -88,7 +88,7 @@ def plot_attention(field, filename, toksize = [12, 6, 12]):
   
   return 0
 
-def compare_to_source(field, filename, toksize = [12, 6, 12], num_samples = 2):
+def compare_to_source(field, filename, toksize = [12, 6, 12], num_samples = 10):
 
   # get source if available
   fname_source = glob.glob(base_dir +'/id'+ model_id +'/*source*.zarr')
