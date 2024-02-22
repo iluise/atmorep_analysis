@@ -11,7 +11,7 @@ The output of the evaluation step is a set of `.zarr` files. Example:
 - (optional) `results_idc96xrbip_epoch00000_attention.zarr`  = file storing the attention scores. Written only if `attention = True` at evaluation stage. 
 
 ### AtmoRep data interface
-The `read_atrorep_data.py` package contains all the functionalities to read the AtmoRep data. The output of read_data is a set of xarrays. 
+The `read_atmorep_data.py` package contains all the functionalities to read the AtmoRep data. The output of read_data is a set of xarrays. 
 ```
 from utils.read_atmorep_data import HandleAtmoRepData
 
@@ -40,18 +40,9 @@ This package, contained within the `trainings` folder contains a plotting routin
 
 
 #### Weather forecasting
-The forecasting analysis is in the `forecasting` folder. This is intended to be an example of how to compare AtmoRep data -- computed with the `global_forecasting` option -- against e.g. PanguWeather data obtained with the [ai-models](https://github.com/ecmwf-lab/ai-models-panguweather/tree/main/ai_models_panguweather) interface provided by ECMWF. 
+The forecasting analysis is in the `forecasting` folder. This is intended to be an example of how to compare AtmoRep data -- computed with the `global_forecasting` option in `evaluate.py` -- against e.g. PanguWeather data obtained with the [ai-models](https://github.com/ecmwf-lab/ai-models-panguweather/tree/main/ai_models_panguweather) interface provided by ECMWF. 
 
 
 #### Attention
-The folder `attention` contains an example to inspect your attention scores. The values can be obtained by setting `attention = True` at evaluation stage. 
-- the code 'plot_attention.py' plots the attention maps from the `.zarr`. (Quite some plots, be patient!) 
-- inside `html_overview` you find an interface to visualise the plots through the browser. 
-````
-mkdir attention_plots 
-ln -s attention_plos html_overview/static/images
-cd html_overview
-python plot_attention.py
-python create_html_overview.py
-`````
-which will create a index.html page that you can open in your browser.
+The folder `attention` contains the code to inspect the attention scores. The values can be obtained by setting `attention = True` at evaluation stage in `evaluate.py`. 
+The code 'plot_attention.py' plots the attention maps from the `*_attention.zarr` file. 
