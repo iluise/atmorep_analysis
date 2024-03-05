@@ -1,7 +1,16 @@
+"""
+Class to read zarr-files of AtmoRep output data.
+"""
+
+__authors__ = "Michael Langguth"
+__email__ = "m.langguth@fz-juelich.de"
+__date__ = "2024-03-05"
+
 import os
 import json
-from typing import List
+from typing import List, Union
 from tqdm import tqdm
+from collections import OrderedDict
 import zarr
 import numpy as np
 import xarray as xr
@@ -55,7 +64,7 @@ class HandleAtmoRepData(object):
         self._results_dir = results_dir
 
         
-    def _get_config(self) -> (str, dict):
+    def _get_config(self) -> Union[str, dict]:
         """
         Get configuration dictionary of trained AtmoRep-model.
         """
@@ -201,29 +210,42 @@ class HandleAtmoRepData(object):
     
     @staticmethod
     def get_global_field(da_list):
+        """
+        Get global field from list of DataArrays.
+        :param da_list: list of DataArrays provided by the 'read_one_forecast_file'-method
+        :return: DataArray with global field (dimensions: [init_time, ml ,leadtime, lat, lon])
+        """
         
-        # get unique time stamps
-        times_unique = list(set([time for da in da_list for time in da["datetime"].values]))
+        # get unique initialization time stamps
+        init_times = list(set([da["datetime"][0].values for da in da_list]))
         dx, dy = np.abs(da_list[0]["lon"][1] - da_list[0]["lon"][0]), \
                  np.abs(da_list[0]["lat"][1] - da_list[0]["lat"][0])
         
         # initialize empty global data array
-        dims = da_list[0].dims
+        dims = ["leadtime" if x == "datetime" else x for x in da_list[0].dims]
+        dims = ["init_time"] + dims
+        
+        # get coordinates of global data array
         data_coords = {k: v for k, v in da_list[0].coords.items() if k not in ["lat", "lon"]}
+        data_coords["leadtime"] = range(len(da_list[0]["datetime"]))
         data_coords["lat"] = np.linspace(-90., 90., num=int(180/dy) + 1, endpoint=True)
         data_coords["lon"] = np.linspace(0, 360, num=int(360/dx), endpoint=False)  
-        data_coords["datetime"] = times_unique
-
+        data_coords["datetime"] = init_times
+        data_coords["init_time"] = data_coords.pop("datetime")
+        # turn into ordered dictionary to ensure correct ordering
+        data_coords = OrderedDict((dim, data_coords[dim]) for dim in dims)
+        
+        # initialize global data array 
         da_global = xr.DataArray(np.empty(tuple(len(d) for d in data_coords.values())), 
                                  coords=data_coords, dims=dims)
         # fill global data array 
         for da in da_list:
-            da_global.loc[{"datetime": da["datetime"], "lat": da["lat"], "lon": da["lon"]}] = da
+            da_global.loc[{"init_time": da["datetime"][0], "lat": da["lat"], "lon": da["lon"]}] = da.values
 
         if np.any(da_global.isnull()): 
             raise ValueError(f"Could not get global data field.")
             
-        return da_global                      
+        return da_global                        
     
         
     def get_hierarchical_sorted_files(self, data_type: str, epoch: int = -1):
