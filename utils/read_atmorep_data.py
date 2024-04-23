@@ -116,6 +116,7 @@ class HandleAtmoRepData(object):
         :param data_type: Type of data which should be retrieved (either 'source', 'target', 'ens' or 'pred')
         :return: list of DataArrays where each element provides one sample
         """    
+        #store = zarr.DirectoryStore(fname) #
         store = zarr.ZipStore(fname)
         grouped_store = zarr.group(store)
             
@@ -151,13 +152,13 @@ class HandleAtmoRepData(object):
         da = []
             
         for ip, patch in tqdm(enumerate(grouped_store[os.path.join(varname)])):
-            data_coords = {dim: (dim_map, grouped_store[os.path.join(varname, patch, f"ml={ml:d}", dim)]) for dim, dim_map in dims_map.items()}
-            data = grouped_store[os.path.join(varname, patch, f"ml={ml:d}", "data")]
+            data_coords = {dim: (dim_map, grouped_store[os.path.join(varname, patch, f"ml={ml:05d}", dim)]) for dim, dim_map in dims_map.items()}
+            data = grouped_store[os.path.join(varname, patch, f"ml={ml:05d}", "data")]
             data_sh = data.shape
             _ = [data_coords.update({dim: range(data_sh[i]) for i, dim in enumerate(dims)})]
 
-            da_p = xr.DataArray(grouped_store[os.path.join(varname, patch, f"ml={ml:d}", "data")], 
-                                coords=data_coords, dims = dims, name=f"{varname}_ml{ml:d}_{patch.replace('=', '')}")
+            da_p = xr.DataArray(grouped_store[os.path.join(varname, patch, f"ml={ml:05d}", "data")], 
+                                coords=data_coords, dims = dims, name=f"{varname}_ml{ml:05d}_{patch.replace('=', '')}")
             da.append(da_p)
 
         return da
@@ -176,7 +177,7 @@ class HandleAtmoRepData(object):
         if self.config["BERT_strategy"] == "forecast":
             self.read_one_file = self.read_one_forecast_file
             args = {"varname": varname, "data_type": data_type}
-        elif self.config["BERT_strategy"] == "BERT":
+        elif self.config["BERT_strategy"] == "BERT" or self.config["BERT_strategy"] == "temporal_interpolation":
             assert isinstance(kwargs.get("ml", None), int), f"Model-level ml must be an integer, but '{kwargs.get('ml', None)}' was parsed."
             self.read_one_file = self.read_one_bert_file
             args = {"varname": varname, "ml": kwargs.get("ml"), "data_type": data_type}

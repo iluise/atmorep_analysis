@@ -40,14 +40,16 @@ field_full_name = {"velocity_u": "U component",
 
 ##########################################
 
-def get_pl_level(ml):
-  levels = {137 : 1000, 
-            123 : 925, 
-            114 : 850, 
-            105 : 700, 
+pl_levels = {137 : 1000,
+            123 : 925,
+            114 : 850,
+            105 : 700,
             96  : 500}
-  assert ml in levels.keys(), f"ml level {ml} not supported. please choose among: {levels.keys()}."
-  return levels[ml]
+
+def get_pl_level(ml):
+  
+  assert ml in pl_levels.keys(), f"ml level {ml} not supported. please choose among: {pl_levels.keys()}."
+  return pl_levels[ml]
 
 ##########################################
   
