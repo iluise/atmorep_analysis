@@ -25,9 +25,9 @@ Date: July 2023
 """
 ##########################################
 
-def calc_scores_item(pred, target, scores, avg = []):
-    score_engine = Scores(pred, target, avg_dims = avg)
-    score_list = [score_engine(score) for score in scores]
+def calc_scores_item(pred, target, ens, scores, options, avg = []):
+    score_engine = Scores(pred, target, ens, avg_dims = avg)
+    score_list = [score_engine(score, **options) for score in scores]
     return score_list
 
 ##########################################
@@ -139,7 +139,7 @@ class Scores:
     Class to calculate scores and skill scores.
     """
 
-    def __init__(self, data_fcst: xr.DataArray, data_ref: xr.DataArray, avg_dims: str_or_list = "all"):
+    def __init__(self, data_fcst: xr.DataArray, data_ref: xr.DataArray, data_ens: xr.DataArray,  avg_dims: str_or_list = "all"):
         """
         :param data_fcst: forecast data to evaluate 
         :param data_ref: reference or ground truth data
@@ -149,12 +149,13 @@ class Scores:
         self.metrics_dict = {"ets": self.calc_ets, "pss": self.calc_pss, "fbi": self.calc_fbi,
                              "mae": self.calc_mae, "l1": self.calc_l1, "l2": self.calc_l2, 
                              "mse": self.calc_mse, "rmse": self.calc_rmse, "bias": self.calc_bias,
-                             "acc": self.calc_acc, "bias": self.calc_bias,
-                             "grad_amplitude": self.calc_spatial_variability, "psnr": self.calc_psnr, 
-                             "iqd": self.calc_iqd, "seeps": self.calc_seeps} 
+                             "acc": self.calc_acc, "bias": self.calc_bias, "spread" : self.calc_spread, 
+                             "ssr": self.calc_ssr, "grad_amplitude": self.calc_spatial_variability,
+                             "psnr": self.calc_psnr, "iqd": self.calc_iqd, "seeps": self.calc_seeps} 
         self.data_fcst = data_fcst
         self.data_dims = list(self.data_fcst.dims)
         self.data_ref = data_ref
+        self.data_ens = data_ens
         self.avg_dims = avg_dims
 
     def __call__(self, score_name, **kwargs):
@@ -331,7 +332,7 @@ class Scores:
 
         return rmse
     
-    def calc_acc(self, clim_mean: xr.DataArray, spatial_dims: List = ["lat", "lon"]):
+    def calc_acc(self, **kwargs):
         """
         Calculate anomaly correlation coefficient (ACC).
         :param clim_mean: climatological mean of the data
@@ -339,10 +340,12 @@ class Scores:
                              Note: No averaging is possible over these dimensions.
         :return acc: Averaged ACC (except over spatial_dims)
         """
+        clim_mean = kwargs.get("clim_mean", None)   
+        spatial_dims = kwargs.get("spatial_dims", ["lat", "lon"])
 
-        fcst_ano, obs_ano = self.data_fcst - clim_mean, self.data_ref - clim_mean
+        #fcst_ano, obs_ano = self.data_fcst - clim_mean, self.data_ref - clim_mean
 
-        acc = (fcst_ano*obs_ano).sum(spatial_dims)/np.sqrt(fcst_ano.sum(spatial_dims)*obs_ano.sum(spatial_dims))
+        acc = ((self.data_fcst - clim_mean)*(self.data_ref - clim_mean)).sum(spatial_dims)/np.sqrt(((self.data_fcst - clim_mean)**2).sum(spatial_dims)*((self.data_ref - clim_mean)**2).sum(spatial_dims))
 
         if self.avg_dims is not None:
             mean_dims = [x for x in self.avg_dims if x not in spatial_dims]
@@ -350,6 +353,30 @@ class Scores:
                 acc = acc.mean(mean_dims)
 
         return acc
+
+    def calc_spread(self, **kwargs):
+        """
+        Calculate the spread of the forecast ensemble 
+        :return: spread averaged over the provided dimensions
+        """
+        if kwargs:
+            print("Passed keyword arguments to calc_spread are without effect.")
+
+        ens_std = self.data_ens.std(dim = "ensemble")
+        return np.sqrt((ens_std**2).mean(dim = self.avg_dims))
+
+    def calc_ssr(self, **kwargs):
+        """
+        Calculate the Spread-Skill Ratio (SSR) of the forecast ensemble data w.r.t. reference data
+        :return: the SSR averaged over provided dimensions
+        """
+        # ens_std = data_ens.std(dim = "ensemble")
+        # spread = np.sqrt((ens_std**2).mean(dim = avg_dims))
+       
+        #spread = self.calc_spread(**kwargs)
+        #mse = np.square(self.data_fcst - self.data_ref).mean(dim = self.avg_dims)
+        #rmse = np.sqrt(mse)
+        return self.calc_spread(**kwargs)/self.calc_rmse(**kwargs) #spread/rmse
 
     def calc_bias(self, **kwargs):
         """
