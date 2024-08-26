@@ -6,6 +6,7 @@ import zarr
 import numpy as np
 import xarray as xr
 from pathlib import Path
+import dask.array as daskarr
 
 class HandleAtmoRepData(object):
     """
@@ -24,7 +25,7 @@ class HandleAtmoRepData(object):
         self.results_dir = results_basedir
         self.config_file, self.config = self._get_config()
         
-        self.target_type = "fields_prediction" if self.config["BERT_strategy"] in ["forecast", "BERT"] else "fields_targets"
+        self.target_type = "fields_prediction" if self.config["BERT_strategy"] in ["global_forecast", "forecast", "BERT"] else "fields_targets"
         
         self.input_variables = self._get_invars()
         self.target_variables = self._get_tarvars()
@@ -108,7 +109,7 @@ class HandleAtmoRepData(object):
             return self.input_token_config
     
     
-    def read_one_forecast_file(self, fname: str, varname: str, data_type: str):
+    def read_one_forecast_file(self, fname: str, varname: str, data_type: str, ml : list):
         """
         Read data from a single output file of AtmoRep and convert to xarray DataArray with underlying coordinate information.
         :param fname: Name of zarr-file that should be read
@@ -128,12 +129,30 @@ class HandleAtmoRepData(object):
             coords = {}
             
         da = []
-        for ip, patch in tqdm(enumerate(grouped_store[os.path.join(varname)])):    
+        
+        for ip, patch in tqdm(enumerate(grouped_store[os.path.join(varname)])):  
             coords.update({dim: grouped_store[os.path.join(varname, patch, dim)] for dim in dims})
             da_p = xr.DataArray(grouped_store[os.path.join(varname, patch, "data")], coords=coords,                
                                 dims = ["ensemble"] + dims if data_type == "ens" else dims, name=f"{varname}_{patch.replace('=', '')}")
-            da.append(da_p)
-        
+
+           # breakpoint()
+            if da_p.datetime.isin([np.datetime64('2021-01-10T07:00:00.000000000'), np.datetime64('2021-01-10T08:00:00.000000000'), np.datetime64('2021-01-10T09:00:00.000000000'), np.datetime64('2021-01-10T10:00:00.000000000'), np.datetime64('2021-01-10T11:00:00.000000000'), np.datetime64('2021-01-10T12:00:00.000000000'), 
+                                                    np.datetime64('2021-04-10T07:00:00.000000000'), np.datetime64('2021-04-10T08:00:00.000000000'), np.datetime64('2021-04-10T09:00:00.000000000'), np.datetime64('2021-04-10T10:00:00.000000000'), np.datetime64('2021-04-10T11:00:00.000000000'), np.datetime64('2021-04-10T12:00:00.000000000'),
+                                                    np.datetime64('2021-07-10T07:00:00.000000000'), np.datetime64('2021-07-10T08:00:00.000000000'), np.datetime64('2021-07-10T09:00:00.000000000'), np.datetime64('2021-07-10T10:00:00.000000000'), np.datetime64('2021-07-10T11:00:00.000000000'), np.datetime64('2021-07-10T12:00:00.000000000'),
+                                                    np.datetime64('2021-01-11T07:00:00.000000000'), np.datetime64('2021-01-11T08:00:00.000000000'), np.datetime64('2021-01-11T09:00:00.000000000'), np.datetime64('2021-01-11T10:00:00.000000000'), np.datetime64('2021-01-11T11:00:00.000000000'), np.datetime64('2021-01-11T12:00:00.000000000'),
+                                                    np.datetime64('2021-04-11T07:00:00.000000000'), np.datetime64('2021-04-11T08:00:00.000000000'), np.datetime64('2021-04-11T09:00:00.000000000'), np.datetime64('2021-04-11T10:00:00.000000000'), np.datetime64('2021-04-11T11:00:00.000000000'), np.datetime64('2021-04-11T12:00:00.000000000'),
+                                                    np.datetime64('2021-07-11T07:00:00.000000000'), np.datetime64('2021-07-11T08:00:00.000000000'), np.datetime64('2021-07-11T09:00:00.000000000'), np.datetime64('2021-07-11T10:00:00.000000000'), np.datetime64('2021-07-11T11:00:00.000000000'), np.datetime64('2021-07-11T12:00:00.000000000'),
+                                                    
+                                                    np.datetime64('2021-01-10T19:00:00.000000000'), np.datetime64('2021-01-10T20:00:00.000000000'), np.datetime64('2021-01-10T21:00:00.000000000'), np.datetime64('2021-01-10T22:00:00.000000000'), np.datetime64('2021-01-10T23:00:00.000000000'), np.datetime64('2021-01-11T00:00:00.000000000'), 
+                                                    np.datetime64('2021-04-10T19:00:00.000000000'), np.datetime64('2021-04-10T20:00:00.000000000'), np.datetime64('2021-04-10T21:00:00.000000000'), np.datetime64('2021-04-10T22:00:00.000000000'), np.datetime64('2021-04-10T23:00:00.000000000'), np.datetime64('2021-04-11T00:00:00.000000000'),
+                                                    np.datetime64('2021-07-10T19:00:00.000000000'), np.datetime64('2021-07-10T20:00:00.000000000'), np.datetime64('2021-07-10T21:00:00.000000000'), np.datetime64('2021-07-10T22:00:00.000000000'), np.datetime64('2021-07-10T23:00:00.000000000'), np.datetime64('2021-07-11T00:00:00.000000000'),
+                                                    np.datetime64('2021-01-11T19:00:00.000000000'), np.datetime64('2021-01-11T20:00:00.000000000'), np.datetime64('2021-01-11T21:00:00.000000000'), np.datetime64('2021-01-11T22:00:00.000000000'), np.datetime64('2021-01-11T23:00:00.000000000'), np.datetime64('2021-01-12T00:00:00.000000000'),
+                                                    np.datetime64('2021-04-11T19:00:00.000000000'), np.datetime64('2021-04-11T20:00:00.000000000'), np.datetime64('2021-04-11T21:00:00.000000000'), np.datetime64('2021-04-11T22:00:00.000000000'), np.datetime64('2021-04-11T23:00:00.000000000'), np.datetime64('2021-04-12T00:00:00.000000000'),
+                                                    np.datetime64('2021-07-11T19:00:00.000000000'), np.datetime64('2021-07-11T20:00:00.000000000'), np.datetime64('2021-07-11T21:00:00.000000000'), np.datetime64('2021-07-11T22:00:00.000000000'), np.datetime64('2021-07-11T23:00:00.000000000'), np.datetime64('2021-07-12T00:00:00.000000000'),
+                                                   
+                                                    ]).any():
+                da.append(da_p.sel(ml = ml, drop = True)) 
+                
         # ML: This would trigger loading data into memory rather than lazy data access.
         #da = xr.concat(da, "patch")
         
@@ -159,7 +178,7 @@ class HandleAtmoRepData(object):
 
             da_p = xr.DataArray(grouped_store[os.path.join(varname, patch, f"ml={ml:05d}", "data")], 
                                 coords=data_coords, dims = dims, name=f"{varname}_ml{ml:05d}_{patch.replace('=', '')}")
-            da.append(da_p)
+            da.append(da_p.sel(ml = ml, drop = True))
 
         return da
     
@@ -174,9 +193,9 @@ class HandleAtmoRepData(object):
         
         filelist = self.get_hierarchical_sorted_files(data_type, epoch)
         
-        if self.config["BERT_strategy"] == "forecast":
+        if self.config["BERT_strategy"] == "forecast" or self.config["BERT_strategy"] == "global_forecast":
             self.read_one_file = self.read_one_forecast_file
-            args = {"varname": varname, "data_type": data_type}
+            args = {"varname": varname, "data_type": data_type, "ml": kwargs.get("ml", None)}
         elif self.config["BERT_strategy"] == "BERT" or self.config["BERT_strategy"] == "temporal_interpolation":
             assert isinstance(kwargs.get("ml", None), int), f"Model-level ml must be an integer, but '{kwargs.get('ml', None)}' was parsed."
             self.read_one_file = self.read_one_bert_file
@@ -192,19 +211,21 @@ class HandleAtmoRepData(object):
         da = []
         for i, f in enumerate(filelist):
             da += self.read_one_file(f, **args)
-            
+      
         # return global data if global forecasting evaluation mode was chosen 
         # ML: preliminary approach: identification via token_overlap-attribute 
-        if self.config["BERT_strategy"] == "forecast" and self.config.get("token_overlap", False):
+        if self.config["BERT_strategy"] == "global_forecast" and self.config.get("token_overlap", False):
             da = self.get_global_field(da)
 
         return da
     
     @staticmethod
     def get_global_field(da_list):
-        
+       
+        print("Info:: Creating global field.")
         # get unique time stamps
         times_unique = list(set([time for da in da_list for time in da["datetime"].values]))
+        temp = [time for da in da_list for time in da["datetime"].values]
         dx, dy = np.abs(da_list[0]["lon"][1] - da_list[0]["lon"][0]), \
                  np.abs(da_list[0]["lat"][1] - da_list[0]["lat"][0])
         
@@ -213,18 +234,20 @@ class HandleAtmoRepData(object):
         data_coords = {k: v for k, v in da_list[0].coords.items() if k not in ["lat", "lon"]}
         data_coords["lat"] = np.linspace(-90., 90., num=int(180/dy) + 1, endpoint=True)
         data_coords["lon"] = np.linspace(0, 360, num=int(360/dx), endpoint=False)  
-        data_coords["datetime"] = times_unique
-
+        data_coords["datetime"] = np.array(times_unique) #.sort()
+        data_coords["datetime"].sort()
+       
         da_global = xr.DataArray(np.empty(tuple(len(d) for d in data_coords.values())), 
-                                 coords=data_coords, dims=dims)
+                                 coords=data_coords, dims=dims).rename("test") #.to_dask_dataframe() 
         # fill global data array 
-        for da in da_list:
+        for da in tqdm(da_list):
+            #da_global.loc[ da_global["datetime"] == da["datetime"],  da_global["lat"] == da["lat"],  da_global["lon"] == da["lon"]] = da
             da_global.loc[{"datetime": da["datetime"], "lat": da["lat"], "lon": da["lon"]}] = da
 
         if np.any(da_global.isnull()): 
             raise ValueError(f"Could not get global data field.")
             
-        return da_global                      
+        return da_global #.rename("test").to_dask_dataframe()                       
     
         
     def get_hierarchical_sorted_files(self, data_type: str, epoch: int = -1):

@@ -48,7 +48,7 @@ class Plotter(object):
     
 ######################################################
 
-    def plot(self, data: type[list | dict], label = "_", name = None, ax = None, bins = 50, log_yscale = False, xlabel = None, ylabel = None):
+    def plot(self, data, label = "_", name = None, ax = None, bins = 50, log_yscale = False, xlabel = None, ylabel = None):
         """
         1D plotting of multiple lists of arrays
         :param data: can be a list of samples for a single histogram, or a dictionary with multiple histograms and labels.
@@ -96,13 +96,14 @@ class Plotter(object):
         
         if save_fig:
             fig.savefig(f"{self.out_dir}/plot_{name}_{self.field}_{self.model_id}_ml{self.level}.png")
+            fig.savefig(f"{self.out_dir}/plot_{name}_{self.field}_{self.model_id}_ml{self.level}.pdf")       
             plt.close()
         else:
             return ax
 
 ######################################################
 
-    def plot_along_dim(self, data: type[list | dict], dim: str, name: str, label = "_", bins = 50, log_yscale = True, single_plot = True):
+    def plot_along_dim(self, data , dim: str, name: str, label = "_", bins = 50, log_yscale = True, single_plot = True):
         """
         1D plotting of multiple lists of arrays looping along a specific dimension
         :param data: can be a list of samples for a single histogram, or a dictionary with multiple histograms and labels.
@@ -250,7 +251,7 @@ class Plotter(object):
         
 ######################################################
 
-    def hist(self, data: type[list | dict], label = "_", name = None, ax = None, bins = 50, log_yscale = False, xlabel = None, ylabel = None, range = None ):
+    def hist(self, data , label = "_", name = None, ax = None, bins = 50, log_yscale = False, xlabel = None, ylabel = None, range = None ):
         """
         1D plotting of multiple lists of arrays
         :param data: can be a list of samples for a single histogram, or a dictionary with multiple histograms and labels.
@@ -307,7 +308,7 @@ class Plotter(object):
 
 ######################################################
 
-    def graph(self, data: type[list | dict], x_val: list, name: str, label = "_", ax = None, std_dev = False, colors = None, ylabel = "", xlabel = ""):
+    def graph(self, data, x_val: list, name: str, label = "_", ax = None, std_dev = False, colors = None, ylabel = "", xlabel = ""):
         """
         1D plotting of multiple lists of arrays along the same x axis. the values along the xaxis are specified by x_val
         :param data: can be a list of samples for a single histogram, or a dictionary with multiple histograms and labels.

@@ -39,20 +39,31 @@ models_id  = {
 #     'irk7o1op': '4 step -> 6h new-training - epoch 10'  #18h
 #     'su4kfzxv': '4 step -> 12h new-training - epoch 5'  #18h        
     #'s23kteu6' : '6 days',
-    'rd4c6tbu' : '7 days - CRPS',
-    '7w7rh21c' : '7 days wMSE + stats'
-    # 'x7n3hnpv' :'7 days - CRPS', 
+    #velocity_u
+    # 'rd4c6tbu' : '7 days - CRPS',
+    #'7w7rh21c' : '7 days weight. MSE + stats',
+    #'dtqm59uy': '7 days MSE + stats'
+    #temperature
+    #'x7n3hnpv' :'7 days - CRPS', 
+    # 'vuk4jkmf': '7 days weight. MSE + stats',
     # 'acsvut65' : '7 days - MSE ensemble + stats'
+
+    #specific humidity
+   
+    #'199j7u50': '3x9x9 global norm',
+    'd018p5pk': '3x18x18 global norm',
+    'lld5w50x': '3x9x9 old config',
 
 }
 plot_pangu = False
 plot_ensemble = True
-experiment = "test1" #"pred24h_atmorep_only"
+experiment = "test" #"pred24h_atmorep_only"
 input_dir = "./results/"
 out_dir   = "./figures/forecast/"
-fields    = ["velocity_u"] #["temperature", "specific_humidity", "velocity_u", "velocity_v"]
+fields    = ["specific_humidity"] #["velocity_u"] #["temperature", "specific_humidity", "velocity_u", "velocity_v"]
+#fields    = ["temperature"] #["velocity_u"] #["temperature", "specific_humidity", "velocity_u", "velocity_v"]
 metrics   = ["ssr"] #"spread"] #, "acc", "spread"] #"rmse", "acc"]
-levels    = [114] #, 123, 114] #, 105, 96]
+levels    = [123] #, 123, 137, 105, 96]
 pl_levels = {137 : 1000, 123 : 925, 114 : 850, 105 : 700, 96: 500}
 #basedir = "/p/scratch/atmo-rep/data/"
 fcst_hours = 6
@@ -94,7 +105,7 @@ for mod_idx, (model_id, label) in enumerate(models_id.items()):
     ar_data = HandleAtmoRepData(model_id, input_dir)
     for fidx, field in enumerate(fields):
             da_target  = ar_data.read_data(field, "target", ml = levels)
-            da_ens     = ar_data.read_data(field, "ens"   , ml = levels) if metrics.count('ssr') > 0 else None
+            da_ens     = ar_data.read_data(field, "ens"   , ml = levels) if (metrics.count('ssr') > 0 or metrics.count('spread') > 0)  else None
             da_pred    = ar_data.read_data(field, "pred"  , ml = levels)
                     
 #           da_source  = ar_data.read_data(field, "source", ml = level).sortby('datetime').sel(ml = level)
