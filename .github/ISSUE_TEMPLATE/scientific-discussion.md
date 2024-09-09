@@ -17,5 +17,4 @@ A clear and concise description of the technical advancements needed to make thi
 Add any other context or screenshots about the discussed topic here. 
 
 ** Related issues**
-link here the issues related to this scientific discussion. 
-Please copy
+link here the issues related to this scientific discussion.
