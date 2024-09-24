@@ -5,7 +5,10 @@ from tqdm import tqdm
 import zarr
 import numpy as np
 import xarray as xr
-from pathlib import Path
+import pathlib as pl
+import dask.array as da
+from read_atmorep_data_parallel import Samples, ChunkedData
+
 
 class HandleAtmoRepData(object):
     """
@@ -38,7 +41,7 @@ class HandleAtmoRepData(object):
     
     @results_dir.setter
     def results_dir(self, results_basedir):
-        results_dir = Path(os.path.join(results_basedir, self.model_id))
+        results_dir = pl.Path(os.path.join(results_basedir, self.model_id))
         config_file =  results_dir.joinpath(f"model_{self.model_id}.json")
         zarr_files = list(results_dir.glob('*.zarr'))
         
@@ -236,8 +239,8 @@ class HandleAtmoRepData(object):
         epoch_str = f"epoch*" if epoch == -1 else f"epoch{epoch:05d}"
         
         fpatt = f"results_{self.model_id}_{epoch_str}_{data_type}.zarr"
-        filelist = list(Path(self.results_dir).glob(f"**/{fpatt}"))
-        
+        filelist = list(pl.Path(self.results_dir).glob(f"**/{fpatt}"))
+
         if len(filelist) == 0:
             raise FileNotFoundError(f"Could not file any files mathcing pattern '{fpatt}' under directory '{self.results_dir}'.")
         
@@ -251,4 +254,61 @@ class HandleAtmoRepData(object):
         # Extract the number from the file name using the provided split argument
         return int(str(file_name).split(split_arg)[1].split('_')[0])  
 
-    
+
+class HandleAtmoRepDataDask(HandleAtmoRepData):
+    def __init__(
+        self, model_id: str, results_basedir: str = "/p/scratch/atmo-rep/results/"
+    ):
+        """
+        :param model_id: ID of Atmorep-run to process
+        :param results_basedir: top-directory where results are stored
+        """
+        super().__init__(self, model_id, results_basedir)
+        self.known_data_types = ["pred", "target"]  # TODO extend datatypes
+
+    def read_data(
+        self, varname: str, data_type, epoch: int = -1, compute: bool = True, **kwargs
+    ) -> xr.DataArray:
+        """
+        Read data from a single output file of AtmoRep and convert to xarray DataArray with underlying coordinate information.
+        :param varname: name of variable for which token info is requested
+        :param data_type: Type of data which should be retrieved (either 'source', 'target', 'ens' or 'pred')
+        :param epoch: training epoch of requested token information file
+        :param compute: call compute on dataarray to eagerly load chunks. (default True)
+        """
+
+        assert (
+            data_type in self.known_data_types
+        ), f"Data type '{data_type}' is unknown. Chosse one of the following: '{', '.join(self.known_data_types)}'"
+
+        # TODO extend readable masking modes
+        if self.config["BERT_strategy"] == "forecast":
+            filenames = self.get_hierarchical_sorted_files(data_type, epoch)
+            data_path = pl.Path(filenames[0])
+            da = self._read_data_parallel(data_path, varname)
+        else:
+            msg = f"Handling data with sampling strategy '{self.config['BERT_strategy']}' is not supported yet."
+            raise ValueError(msg)
+
+        return da
+
+    def _read_data_parallel(self, datapath: pl.Path, varname: str, compute: bool):
+        samples = Samples(datapath, varname)
+        chunky = ChunkedData(samples)
+
+        dask_array = da.empty(shape=chunky.shape, chunks=chunky.chunks)
+        data = xr.DataArray(dask_array, coords=chunky.global_coords, dims=chunky.dims)
+        loaded_data = data.map_blocks(chunky.load_chunk, template=data)
+        if compute:
+            return loaded_data.compute()
+
+        return loaded_data
+
+    def _get_file(self):
+        model_id = "idcp73kj9o"
+        epoch = 0
+        varname = "specific_humidity"
+        lead_time = 6
+
+        filename = f"results_{model_id}_epoch{epoch:05d}_pred.zarr"
+        datapath = pl.Path(model_id) / filename
