@@ -183,7 +183,7 @@ class HandleAtmoRepData(object):
         
         filelist = self.get_hierarchical_sorted_files(data_type, epoch)
         
-        if self.config["BERT_strategy"] == "forecast":
+        if self.config["BERT_strategy"] == "global_forecast":
             self.read_one_file = self.read_one_forecast_file
             args = {"varname": varname, "data_type": data_type}
         elif self.config["BERT_strategy"] == "BERT" or self.config["BERT_strategy"] == "temporal_interpolation":
@@ -269,11 +269,11 @@ class HandleAtmoRepDataDask(HandleAtmoRepData):
         :param model_id: ID of Atmorep-run to process
         :param results_basedir: top-directory where results are stored
         """
-        super().__init__(self, model_id, results_basedir)
+        super().__init__(model_id, results_basedir)
         self.known_data_types = ["pred", "target"]  # TODO extend datatypes
 
     def read_data(
-        self, varname: str, data_type, epoch: int = -1, compute: bool = True, **kwargs
+        self, varname: str, data_type, epoch: int = -1, compute: bool = False, **kwargs
     ) -> xr.DataArray:
         """
         Read data from a single output file of AtmoRep and convert to xarray DataArray with underlying coordinate information.
@@ -288,15 +288,16 @@ class HandleAtmoRepDataDask(HandleAtmoRepData):
         ), f"Data type '{data_type}' is unknown. Chosse one of the following: '{', '.join(self.known_data_types)}'"
 
         # TODO extend readable masking modes
-        if self.config["BERT_strategy"] == "forecast":
+        if self.config["BERT_strategy"] == "global_forecast":
             filenames = self.get_hierarchical_sorted_files(data_type, epoch)
             data_path = pl.Path(filenames[0])
-            da = self._read_data_parallel(data_path, varname)
+            print(data_path)
+            da = self._read_data_parallel(data_path, varname, compute)
         else:
             msg = f"Handling data with sampling strategy '{self.config['BERT_strategy']}' is not supported yet."
             raise ValueError(msg)
 
-        return da
+        return [da]
 
     def _read_data_parallel(self, datapath: pl.Path, varname: str, compute: bool):
         samples = Samples(datapath, varname)
