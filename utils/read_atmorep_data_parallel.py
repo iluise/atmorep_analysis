@@ -54,6 +54,8 @@ class ChunkedData:
 
     def get_global_coords(self):
         example_sample = self.samples.get_sample(0)
+        
+        print(self._forecast_times.size, self._forecast_times.min(), self._forecast_times.max())
 
         start = self._forecast_times.min() - self.lead_time
         end = self._forecast_times.max()
@@ -83,8 +85,6 @@ class ChunkedData:
 
     def load_chunk(self, chunk: xr.DataArray) -> xr.DataArray:
         forecast_time = chunk["datetime"].values[-1]
-        # chunk_buffer = self.get_chunk_buffer(samples, chunk_idx)
-
         try:
             for sample in self.get_samples(forecast_time):
                 chunk.loc[sample.coords] = sample.data
@@ -101,7 +101,6 @@ class ChunkedData:
             msg = f"no data for forecast time {forecast_time}"
             raise ValueError(msg)
         chunk_idx = int(chunk_idx)
-        print(chunk_idx, forecast_time)
         sample_idxs = self._get_samples_idxs(chunk_idx)
         return [self.samples.get_sample(idx) for idx in sample_idxs]
 

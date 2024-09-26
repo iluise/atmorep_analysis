@@ -9,9 +9,7 @@ import pathlib as pl
 import dask.array as da
 import sys
 
-print(sys.path, pl.Path(__file__).parent)
 sys.path.append(pl.Path(__file__).parent)
-print(sys.path)
 from utils.read_atmorep_data_parallel import Samples, ChunkedData
 
 
@@ -291,7 +289,6 @@ class HandleAtmoRepDataDask(HandleAtmoRepData):
         if self.config["BERT_strategy"] == "global_forecast":
             filenames = self.get_hierarchical_sorted_files(data_type, epoch)
             data_path = pl.Path(filenames[0])
-            print(data_path)
             da = self._read_data_parallel(data_path, varname, compute)
         else:
             msg = f"Handling data with sampling strategy '{self.config['BERT_strategy']}' is not supported yet."
@@ -300,16 +297,17 @@ class HandleAtmoRepDataDask(HandleAtmoRepData):
         return [da]
 
     def _read_data_parallel(self, datapath: pl.Path, varname: str, compute: bool):
-        print("setup reader")
         samples = Samples(datapath, varname)
+        print(samples.size)
         chunky = ChunkedData(samples)
+        
+        print("target shape: ", chunky.shape)
+        print("target chunks: ", chunky.chunks)
 
-        print("start iniatializing dask array")
         dask_array = da.empty(shape=chunky.shape, chunks=chunky.chunks)
         data = xr.DataArray(dask_array, coords=chunky.global_coords, dims=chunky.dims)
-        print("map data loading function")
+        # improved in 2024.01
         loaded_data = data.map_blocks(chunky.load_chunk, template=data)
-        print("finished loading data")
         if compute:
             return loaded_data.compute()
 
