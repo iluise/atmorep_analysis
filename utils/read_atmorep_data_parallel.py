@@ -59,7 +59,7 @@ class ChunkedData:
 
         start = self._forecast_times.min() - self.lead_time
         end = self._forecast_times.max()
-        times = np.arange(start, end, np.timedelta64(1, "h"), dtype="datetime64[h]")
+        times = np.arange(start, end, np.timedelta64(1, "h"), dtype="datetime64[ns]")
         times += np.timedelta64(1, "h")
         dx = np.abs(example_sample.coords["lon"][1] - example_sample.coords["lon"][0])
         dy = np.abs(example_sample.coords["lat"][1] - example_sample.coords["lat"][0])
@@ -76,7 +76,7 @@ class ChunkedData:
         )
         sample_times = np.empty(
             shape=(samples.size, samples.lead_time),
-            dtype=("datetime64[h]"),
+            dtype=("datetime64[ns]"),
         )
         for idx, datetimes in index_datetimes:
             sample_times[idx] = datetimes
