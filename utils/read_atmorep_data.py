@@ -7,7 +7,13 @@ import numpy as np
 import xarray as xr
 import pathlib as pl
 import dask.array as da
-from read_atmorep_data_parallel import Samples, ChunkedData
+import sys
+
+print(sys.path, pl.Path(__file__).parent)
+sys.path.append(pl.Path(__file__).parent)
+print(sys.path)
+from utils.read_atmorep_data_parallel import Samples, ChunkedData
+
 
 
 class HandleAtmoRepData(object):
