@@ -54,11 +54,10 @@ class ChunkedData:
 
     def get_global_coords(self):
         example_sample = self.samples.get_sample(0)
-        
-        print(self._forecast_times.size, self._forecast_times.min(), self._forecast_times.max())
 
-        start = self._forecast_times.min() - self.lead_time
+        start = self._forecast_times.min() - np.timedelta64(self.lead_time, "h")
         end = self._forecast_times.max()
+
         times = np.arange(start, end, np.timedelta64(1, "h"), dtype="datetime64[ns]")
         times += np.timedelta64(1, "h")
         dx = np.abs(example_sample.coords["lon"][1] - example_sample.coords["lon"][0])
