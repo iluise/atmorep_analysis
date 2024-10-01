@@ -95,12 +95,19 @@ class ChunkedData:
         return chunk
 
     def get_samples(self, forecast_time: np.datetime64):
+        chunk_idx = self.get_chunk_idx(forecast_time)
+        print(forecast_time, chunk_idx)
+        return self._get_chunk_samples(chunk_idx)
+
+    def get_chunk_idx(self, forecast_time: np.datetime64):
         # assume forecasttimes are unique
         chunk_idx = np.argwhere(self._forecast_times == forecast_time)
         if chunk_idx.size == 0:
             msg = f"no data for forecast time {forecast_time}"
             raise ValueError(msg)
-        chunk_idx = int(chunk_idx)
+        return int(chunk_idx)
+
+    def _get_chunk_samples(self, chunk_idx: int):
         sample_idxs = self._get_samples_idxs(chunk_idx)
         return [self.samples.get_sample(idx) for idx in sample_idxs]
 
