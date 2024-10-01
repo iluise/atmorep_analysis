@@ -84,14 +84,23 @@ class ChunkedData:
 
     def load_chunk(self, chunk: xr.DataArray) -> xr.DataArray:
         forecast_time = chunk["datetime"].values[-1]
+        buffer_da = self._get_chunk_buffer(chunk)
         try:
             for sample in self.get_samples(forecast_time):
-                chunk.loc[sample.coords] = sample.data
+                buffer_da.loc[sample.coords] = np.swapaxes(sample.data, 0, 1)
         except ValueError:  # no data for this chunk
-            # chunk.loc[{"datetime": chunk["datetime"]}] = np.nan
-            pass
+            buffer_da.loc[{"datetime": chunk["datetime"]}] = np.nan
 
-        return chunk
+        return buffer_da
+
+    def _get_chunk_buffer(self, chunk: xr.DataArray):
+        """
+        construct DataArray with numpy array as backend array.
+        
+        Avoids NotImplementedError: xarray can't set arrays with multiple array indices to dask yet, by using a separate buffer instead of reusing "chunk".
+        """
+        buffer = np.empty(chunk.shape)
+        return xr.DataArray(buffer, coords=chunk.coords, dims=chunk.dims)
 
     def get_samples(self, forecast_time: np.datetime64):
         chunk_idx = self.get_chunk_idx(forecast_time)
