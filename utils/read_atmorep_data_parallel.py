@@ -30,7 +30,12 @@ class Samples:
 
     def get_sample(self, idx) -> Sample:
         sample = self.samples[self.as_key(idx)]
-        coords = {key: values for key, values in sample.arrays() if not key == "data"}
+        coords = {
+            "datetime": sample["datetime"],
+            "ml": sample["ml"],
+            "lat": sample["lat"],
+            "lon": sample["lon"]
+        }
 
         return Sample(coords, sample["data"])
 
