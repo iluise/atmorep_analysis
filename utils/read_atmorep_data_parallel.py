@@ -41,7 +41,7 @@ class Samples:
 
 
 class ChunkedData:
-    def __init__(self, samples):
+    def __init__(self, samples, dask_chunk_factor=1):
         self.samples = samples
         self.lead_time = self.samples.lead_time
         self.time_chunks, self._chunk_to_samples = self.from_samples(self.samples)
@@ -53,7 +53,7 @@ class ChunkedData:
 
         self.shape = [self.global_coords[dim].size for dim in self.dims]
         self.chunks = [
-            self.lead_time if dim == "datetime" else dim_size
+            self.lead_time*dask_chunk_factor if dim == "datetime" else dim_size
             for dim_size, dim in zip(self.shape, self.dims)
         ]
 
