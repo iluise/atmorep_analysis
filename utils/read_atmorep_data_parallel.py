@@ -4,6 +4,8 @@ import xarray as xr
 import pathlib as pl
 import collections
 import functools
+import os
+import typing
 
 
 Sample = collections.namedtuple("Sample", ["coords", "data"])
@@ -48,7 +50,8 @@ class ChunkedData:
         self._samples_idxs = np.arange(self._chunk_to_samples.size)
         self._forecast_times = self.time_chunks[:, -1]
 
-        self.global_coords = self.get_global_coords()
+        self.global_coords, dx_dy = self.get_global_coords()
+        self.dx, self.dy = dx_dy
         self.dims = ["datetime", "ml", "lat", "lon"]
 
         self.shape = [self.global_coords[dim].size for dim in self.dims]
@@ -65,12 +68,15 @@ class ChunkedData:
 
         times = np.arange(start, end, np.timedelta64(1, "h"), dtype="datetime64[ns]")
         times += np.timedelta64(1, "h")
+
         dx = np.abs(example_sample.coords["lon"][1] - example_sample.coords["lon"][0])
         dy = np.abs(example_sample.coords["lat"][1] - example_sample.coords["lat"][0])
+        
         lats = np.linspace(-90.0, 90.0, num=int(180 / dy) + 1, endpoint=True)
         lons = np.linspace(0, 360, num=int(360 / dx), endpoint=False)
         levels = example_sample.coords["ml"]
-        return {"datetime": times, "ml": levels, "lat": lats, "lon": lons}
+
+        return {"datetime": times, "ml": levels, "lat": lats, "lon": lons}, (dx, dy)
 
     @classmethod
     def from_samples(cls, samples: Samples):
@@ -98,6 +104,48 @@ class ChunkedData:
 
         return buffer_da
 
+    def load_chunk_index_lookup(self, chunk: xr.DataArray) -> xr.DataArray:
+        forecast_time = chunk["datetime"].values[-1]
+        buffer_da = self._get_chunk_buffer(chunk)
+        try:
+            for sample in self.get_samples(forecast_time):
+                lat_range, lon_range = self.coords_as_ranges(sample.coords)
+                buffer_da[:, :, lat_range, lon_range] = np.swapaxes(sample.data, 0, 1)
+        except ValueError:  # no data for this chunk
+            buffer_da.loc[{"datetime": chunk["datetime"]}] = np.nan
+
+        return buffer_da
+
+    def load_chunk_numpy(self, chunk: xr.DataArray) -> xr.DataArray:
+        forecast_time = chunk["datetime"].values[-1]
+        buffer = np.empty(chunk.shape)
+        try:
+            for sample in self.get_samples(forecast_time):
+                lat_range, lon_range = self.coords_as_ranges(sample.coords)
+                buffer[:, :, lat_range, lon_range] = np.swapaxes(sample.data, 0, 1)
+        except IndexError:
+            buffer[:] = np.nan
+
+        return xr.DataArray(buffer, coords=chunk.coords, dims=chunk.dims)
+
+    def coords_as_ranges(self, coords: dict["str", typing.Any]) -> tuple[range]:
+        # TODO: make sure edge cases work
+        global_lats_max = self.global_coords["lat"][0].astype(int)
+        sample_lats_max = coords["lat"][0].astype(int)
+
+        lat_size = self.shape[2]
+        # substract global min coord from sample min coord to obtain index
+        lat_start_idx = global_lats_max - sample_lats_max
+        lat_range = range(lat_start_idx, lat_start_idx+lat_size)
+
+        global_lons_min = self.global_coords["lon"][0].astype(int)
+        sample_lons_min = coords["lon"][0].astype(int)
+
+        lon_size = self.shape[3]
+        lon_start_idx = sample_lons_min - global_lons_min
+        lon_range = range(lon_start_idx, lon_start_idx+lon_size)
+
+        return lat_range, lon_range
     def _get_chunk_buffer(self, chunk: xr.DataArray):
         """
         construct DataArray with numpy array as backend array.
