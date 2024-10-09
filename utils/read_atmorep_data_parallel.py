@@ -9,6 +9,7 @@ import typing
 
 
 Sample = collections.namedtuple("Sample", ["coords", "data"])
+IndexRange = collections.namedtuple("IndexRange", ["start", "end"])
 
 
 class Samples:
@@ -50,33 +51,37 @@ class ChunkedData:
         self._samples_idxs = np.arange(self._chunk_to_samples.size)
         self._forecast_times = self.time_chunks[:, -1]
 
-        self.global_coords, dx_dy = self.get_global_coords()
-        self.dx, self.dy = dx_dy
+        example_sample = self.samples.get_sample(0)
+        self.dx = np.abs(
+            example_sample.coords["lon"][1] - example_sample.coords["lon"][0]
+        )
+        self.dy = np.abs(
+            example_sample.coords["lat"][1] - example_sample.coords["lat"][0]
+        )
+        self.global_coords = self.get_global_coords(example_sample)
         self.dims = ["datetime", "ml", "lat", "lon"]
 
+        self.sample_shape = [example_sample.coords[dim].size for dim in self.dims]
         self.shape = [self.global_coords[dim].size for dim in self.dims]
         self.chunks = [
             self.lead_time*dask_chunk_factor if dim == "datetime" else dim_size
             for dim_size, dim in zip(self.shape, self.dims)
         ]
 
-    def get_global_coords(self):
-        example_sample = self.samples.get_sample(0)
+        self._lat_padding = self.sample_shape[3] # use one entire sample as padding
 
+    def get_global_coords(self, example_sample):
         start = self._forecast_times.min() - np.timedelta64(self.lead_time, "h")
         end = self._forecast_times.max()
 
         times = np.arange(start, end, np.timedelta64(1, "h"), dtype="datetime64[ns]")
         times += np.timedelta64(1, "h")
 
-        dx = np.abs(example_sample.coords["lon"][1] - example_sample.coords["lon"][0])
-        dy = np.abs(example_sample.coords["lat"][1] - example_sample.coords["lat"][0])
-        
-        lats = np.linspace(-90.0, 90.0, num=int(180 / dy) + 1, endpoint=True)
-        lons = np.linspace(0, 360, num=int(360 / dx), endpoint=False)
+        lats = np.linspace(-90.0, 90.0, num=int(180 / self.dy) + 1, endpoint=True)
+        lons = np.linspace(0, 360, num=int(360 / self.dx), endpoint=False)
         levels = example_sample.coords["ml"]
 
-        return {"datetime": times, "ml": levels, "lat": lats, "lon": lons}, (dx, dy)
+        return {"datetime": times, "ml": levels, "lat": lats, "lon": lons}
 
     @classmethod
     def from_samples(cls, samples: Samples):
