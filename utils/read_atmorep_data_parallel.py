@@ -123,32 +123,41 @@ class ChunkedData:
 
     def load_chunk_numpy(self, chunk: xr.DataArray) -> xr.DataArray:
         forecast_time = chunk["datetime"].values[-1]
-        buffer = np.empty(chunk.shape)
+
+        # add padding to lat dim to account for wrap around of indexes/coords
+        lat_size = chunk.shape[-1]
+        lat_size_padded = lat_size + self._lat_padding
+        shape_with_padding = (*chunk.shape[:-1], lat_size_padded)
+        buffer = np.empty(shape_with_padding)
+
         try:
             for sample in self.get_samples(forecast_time):
-                lat_range, lon_range = self.coords_as_ranges(sample.coords)
-                buffer[:, :, lat_range, lon_range] = np.swapaxes(sample.data, 0, 1)
+                lats, lons = self.coords_as_ranges(sample.coords)
+                # conform data: swap ml/datetime axis, flip lat axis
+                sample_data = np.flip(np.swapaxes(sample.data, 0, 1), axis=2)
+                buffer[:, :, lats.start:lats.end, lons.start:lons.end] = sample_data
         except IndexError:
             buffer[:] = np.nan
 
-        return xr.DataArray(buffer, coords=chunk.coords, dims=chunk.dims)
+        return xr.DataArray( # remove padding again
+            buffer[:,:,:,:lat_size], coords=chunk.coords, dims=chunk.dims
+        )
 
-    def coords_as_ranges(self, coords: dict["str", typing.Any]) -> tuple[range]:
-        # TODO: make sure edge cases work
-        global_lats_max = self.global_coords["lat"][0].astype(int)
-        sample_lats_max = coords["lat"][0].astype(int)
+    def coords_as_ranges(self, coords: dict["str", typing.Any]) -> tuple[IndexRange]:
+        global_lats_min = self.global_coords["lat"][0]
+        sample_lats_min = coords["lat"][-1]
 
-        lat_size = self.shape[2]
+        lat_size = coords["lat"].size
         # substract global min coord from sample min coord to obtain index
-        lat_start_idx = global_lats_max - sample_lats_max
-        lat_range = range(lat_start_idx, lat_start_idx+lat_size)
+        lat_start_idx = int((sample_lats_min - global_lats_min)*(1/self.dy))
+        lat_range = IndexRange(lat_start_idx, lat_start_idx + lat_size)
 
         global_lons_min = self.global_coords["lon"][0].astype(int)
         sample_lons_min = coords["lon"][0].astype(int)
 
-        lon_size = self.shape[3]
-        lon_start_idx = sample_lons_min - global_lons_min
-        lon_range = range(lon_start_idx, lon_start_idx+lon_size)
+        lon_size = coords["lon"].size
+        lon_start_idx = int((sample_lons_min - global_lons_min)*(1/self.dx))
+        lon_range = IndexRange(lon_start_idx, lon_start_idx+lon_size)
 
         return lat_range, lon_range
     def _get_chunk_buffer(self, chunk: xr.DataArray):
