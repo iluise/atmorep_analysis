@@ -21,11 +21,22 @@ class Samples:
     def __init__(self, path: pl.Path, field: str):
         self.sample_key_prefix = "sample="
         self.sample_idx_format = r"{:05d}"
+        
         store = zarr.ZipStore(path)
         self.samples = zarr.group(store)[field]
-        example_sample = self.get_sample(0)
+
+        example_sample = self.get_sample(0) # assume sample idx 0 always present
+        self.dims = list(example_sample.coords.keys())
+        self.shape = [example_sample.coords[dim].size for dim in self.dims]
         self.size = len(self.samples)
         self.lead_time = example_sample.coords["datetime"].size
+        self.dx = np.abs(
+            example_sample.coords["lon"][1] - example_sample.coords["lon"][0]
+        )
+        self.dy = np.abs(
+            example_sample.coords["lat"][1] - example_sample.coords["lat"][0]
+        )
+        self.levels = example_sample.coords["ml"]
 
     def get_sample_idxs(self, chunk_idx: int):
         return self.sample_idxs[self.inverse == chunk_idx]
@@ -51,31 +62,27 @@ class Samples:
 class ChunkedData:
     def __init__(self, samples, dask_chunk_factor=1):
         self.samples = samples
-        self.lead_time = self.samples.lead_time
         self.time_chunks, self._chunk_to_samples = self.from_samples(self.samples)
         self._samples_idxs = np.arange(self._chunk_to_samples.size)
         self._forecast_times = self.time_chunks[:, -1]
 
-        example_sample = self.samples.get_sample(0)
-        self.dx = np.abs(
-            example_sample.coords["lon"][1] - example_sample.coords["lon"][0]
-        )
-        self.dy = np.abs(
-            example_sample.coords["lat"][1] - example_sample.coords["lat"][0]
-        )
-        self.global_coords = self.get_global_coords(example_sample)
-        self.dims = ["datetime", "ml", "lat", "lon"]
+        self.lead_time = self.samples.lead_time
+        self.dims = self.samples.dims
+        self.dy, self.dx = self.samples.dy, self.samples.dx
 
-        self.sample_shape = [example_sample.coords[dim].size for dim in self.dims]
+        example_sample = self.samples.get_sample(0)
+
+        self.global_coords = self.get_global_coords()
+
         self.shape = [self.global_coords[dim].size for dim in self.dims]
         self.chunks = [
             self.lead_time*dask_chunk_factor if dim == "datetime" else dim_size
             for dim_size, dim in zip(self.shape, self.dims)
         ]
 
-        self._lat_padding = self.sample_shape[3] # use one entire sample as padding
+        self._lat_padding = self.samples.shape[3] # use one entire sample as padding
 
-    def get_global_coords(self, example_sample):
+    def get_global_coords(self):
         start = self._forecast_times.min() - np.timedelta64(self.lead_time, "h")
         end = self._forecast_times.max()
 
@@ -83,10 +90,9 @@ class ChunkedData:
         times += np.timedelta64(1, "h")
 
         lats = np.linspace(-90.0, 90.0, num=int(180 / self.dy) + 1, endpoint=True)
-        lons = np.linspace(0, 360, num=int(360 / self.dx), endpoint=False)
-        levels = example_sample.coords["ml"]
+        lons = np.linspace(0, 360, num=int(360 / self.samples.dx), endpoint=False)
 
-        return {"datetime": times, "ml": levels, "lat": lats, "lon": lons}
+        return {"datetime": times, "ml": self.samples.levels, "lat": lats, "lon": lons}
 
     @classmethod
     def from_samples(cls, samples: Samples):
