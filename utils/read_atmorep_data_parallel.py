@@ -60,6 +60,20 @@ class Samples:
         return Sample(coords, sample["data"])
 
 
+class EnsembleSamples:
+    def get_sample(self, idx) -> Sample:
+        sample = self.samples[self.as_key(idx)]
+        coords = {
+            "ens": sample["ens"], # add additional dimension
+            "datetime": sample["datetime"],
+            "ml": sample["ml"],
+            "lat": sample["lat"],
+            "lon": sample["lon"],
+        }
+
+        return Sample(coords, sample["data"])
+
+
 class ChunkedData:
     def __init__(self, samples, dask_chunk_factor=1):
         self.samples = samples
