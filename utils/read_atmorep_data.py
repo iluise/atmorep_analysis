@@ -199,10 +199,16 @@ class HandleAtmoRepData(object):
         da = []
         for i, f in enumerate(filelist):
             da += self.read_one_file(f, **args)
-            
-        # return global data if global forecasting evaluation mode was chosen 
-        # ML: preliminary approach: identification via token_overlap-attribute 
-        if self.config["BERT_strategy"] == "forecast" and self.config.get("token_overlap", False):
+
+        # return global data if global forecasting evaluation mode was chosen
+        # ML: preliminary approach: identification via token_overlap-attribute
+        if (
+            (
+                self.config["BERT_strategy"] == "forecast"
+                and self.config.get("token_overlap", False)
+            )
+            or self.config["BERT_strategy"] == "global_forecast"
+        ):
             da = self.get_global_field(da)
 
         return da
@@ -294,7 +300,7 @@ class HandleAtmoRepDataDask(HandleAtmoRepData):
             msg = f"Handling data with sampling strategy '{self.config['BERT_strategy']}' is not supported yet."
             raise ValueError(msg)
 
-        return [da]
+        return da
 
     def _read_data_parallel(self, datapath: pl.Path, varname: str, compute: bool):
         samples = Samples(datapath, varname)
