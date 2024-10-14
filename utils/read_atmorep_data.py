@@ -313,7 +313,7 @@ class HandleAtmoRepDataDask(HandleAtmoRepData):
         dask_array = da.empty(shape=chunky.shape, chunks=chunky.chunks)
         data = xr.DataArray(dask_array, coords=chunky.global_coords, dims=chunky.dims)
         # improved in 2024.01
-        loaded_data = data.map_blocks(chunky.load_chunk_numpy, template=data)
+        loaded_data = data.map_blocks(chunky.load_chunk, template=data)
         if compute:
             return loaded_data.compute()
 
