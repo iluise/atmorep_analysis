@@ -7,6 +7,7 @@ import functools
 import os
 import typing
 import dataclasses
+import itertools as it
 
 
 @dataclasses.dataclass
@@ -171,6 +172,50 @@ class ChunkedData:
         lon_range = IndexRange(lon_start_idx, lon_start_idx+lon_size)
 
         return lat_range, lon_range
+
+    def load_chunk_baseline(self, chunk: xr.DataArray) -> xr.DataArray:
+        n_samples = chunk.datetime.size * 196
+        da_list = []
+        coords = {}
+        time_coords = chunk.datetime.values
+        buffer_da = self._get_chunk_buffer(chunk)
+
+        # load any samples equivalent to one chunk
+        for sample in it.islice(self.samples.samples, 1, n_samples+1):
+            da_list.append(self.read_chunk_baseline(sample, coords, time_coords))
+
+        self.merge_chunks_baseline(buffer_da, da_list)
+
+        return buffer_da
+
+    def read_chunk_baseline(self, sample: zarr.Group, coords, time_coords):
+        coords.update(
+            {
+                dim: self.samples.samples[os.path.join(sample, dim)] if not dim=="datetime" else time_coords for dim in self.dims
+            }
+        )
+        data = self.samples.samples[os.path.join(sample, "data")]
+        # print(data.shape, self.dims, coords)
+        sample_da = xr.DataArray(
+            np.swapaxes(data, 0,1),
+            coords=coords,
+            dims=self.dims,
+            name=f"specific_humidity_{sample.replace('=', '')}"
+        )
+        return sample_da
+
+    def merge_chunks_baseline(
+        self, global_data: xr.DataArray, da_list: list[zarr.Group]
+    ):
+        for sample in da_list:
+            global_data.loc[
+                {
+                    "datetime": sample["datetime"],
+                    "lat": sample["lat"],
+                    "lon": sample["lon"],
+                }
+            ] = sample
+
     def _get_chunk_buffer(self, chunk: xr.DataArray):
         """
         construct DataArray with numpy array as backend array.
