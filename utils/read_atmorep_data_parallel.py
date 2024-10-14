@@ -110,30 +110,11 @@ class ChunkedData:
 
         return np.unique(sample_times, return_inverse=True, axis=0)
 
+   
+
+    
+
     def load_chunk(self, chunk: xr.DataArray) -> xr.DataArray:
-        forecast_time = chunk["datetime"].values[-1]
-        buffer_da = self._get_chunk_buffer(chunk)
-        try:
-            for sample in self.get_samples(forecast_time):
-                buffer_da.loc[sample.coords] = np.swapaxes(sample.data, 0, 1)
-        except ValueError:  # no data for this chunk
-            buffer_da.loc[{"datetime": chunk["datetime"]}] = np.nan
-
-        return buffer_da
-
-    def load_chunk_index_lookup(self, chunk: xr.DataArray) -> xr.DataArray:
-        forecast_time = chunk["datetime"].values[-1]
-        buffer_da = self._get_chunk_buffer(chunk)
-        try:
-            for sample in self.get_samples(forecast_time):
-                lat_range, lon_range = self.coords_as_ranges(sample.coords)
-                buffer_da[:, :, lat_range, lon_range] = np.swapaxes(sample.data, 0, 1)
-        except ValueError:  # no data for this chunk
-            buffer_da.loc[{"datetime": chunk["datetime"]}] = np.nan
-
-        return buffer_da
-
-    def load_chunk_numpy(self, chunk: xr.DataArray) -> xr.DataArray:
         forecast_time = chunk["datetime"].values[-1]
 
         # add padding to lat dim to account for wrap around of indexes/coords
@@ -173,48 +154,7 @@ class ChunkedData:
 
         return lat_range, lon_range
 
-    def load_chunk_baseline(self, chunk: xr.DataArray) -> xr.DataArray:
-        n_samples = chunk.datetime.size * 196
-        da_list = []
-        coords = {}
-        time_coords = chunk.datetime.values
-        buffer_da = self._get_chunk_buffer(chunk)
-
-        # load any samples equivalent to one chunk
-        for sample in it.islice(self.samples.samples, 1, n_samples+1):
-            da_list.append(self.read_chunk_baseline(sample, coords, time_coords))
-
-        self.merge_chunks_baseline(buffer_da, da_list)
-
-        return buffer_da
-
-    def read_chunk_baseline(self, sample: zarr.Group, coords, time_coords):
-        coords.update(
-            {
-                dim: self.samples.samples[os.path.join(sample, dim)] if not dim=="datetime" else time_coords for dim in self.dims
-            }
-        )
-        data = self.samples.samples[os.path.join(sample, "data")]
-        # print(data.shape, self.dims, coords)
-        sample_da = xr.DataArray(
-            np.swapaxes(data, 0,1),
-            coords=coords,
-            dims=self.dims,
-            name=f"specific_humidity_{sample.replace('=', '')}"
-        )
-        return sample_da
-
-    def merge_chunks_baseline(
-        self, global_data: xr.DataArray, da_list: list[zarr.Group]
-    ):
-        for sample in da_list:
-            global_data.loc[
-                {
-                    "datetime": sample["datetime"],
-                    "lat": sample["lat"],
-                    "lon": sample["lon"],
-                }
-            ] = sample
+    
 
     def _get_chunk_buffer(self, chunk: xr.DataArray):
         """
@@ -245,3 +185,79 @@ class ChunkedData:
     @functools.cache
     def _get_samples_idxs(self, chunk_idx: int):
         return self._samples_idxs[self._chunk_to_samples == chunk_idx]
+
+class XarrayIndexing(ChunkedData):
+    def load_chunk(self, chunk: xr.DataArray) -> xr.DataArray:
+        forecast_time = chunk["datetime"].values[-1]
+        buffer_da = self._get_chunk_buffer(chunk)
+        try:
+            for sample in self.get_samples(forecast_time):
+                buffer_da.loc[sample.coords] = np.swapaxes(sample.data, 0, 1)
+        except ValueError:  # no data for this chunk
+            buffer_da.loc[{"datetime": chunk["datetime"]}] = np.nan
+
+        return buffer_da
+
+
+class IndexLookup(ChunkedData):    
+    def load_chunk(self, chunk: xr.DataArray) -> xr.DataArray:
+        forecast_time = chunk["datetime"].values[-1]
+        buffer_da = self._get_chunk_buffer(chunk)
+        try:
+            for sample in self.get_samples(forecast_time):
+                lat_range, lon_range = self.coords_as_ranges(sample.coords)
+                buffer_da[:, :, lat_range, lon_range] = np.swapaxes(sample.data, 0, 1)
+        except ValueError:  # no data for this chunk
+            buffer_da.loc[{"datetime": chunk["datetime"]}] = np.nan
+
+        return buffer_da
+
+
+class Baseline(ChunkedData):
+    def load_chunk(self, chunk: xr.DataArray) -> xr.DataArray:
+        n_samples = chunk.datetime.size * 196
+        da_list = []
+        coords = {}
+        time_coords = chunk.datetime.values
+        buffer_da = self._get_chunk_buffer(chunk)
+
+        # load any samples equivalent to one chunk
+        for sample in it.islice(self.samples.samples, 1, n_samples + 1):
+            da_list.append(self.read_chunk_baseline(sample, coords, time_coords))
+
+        self.merge_chunks_baseline(buffer_da, da_list)
+
+        return buffer_da
+
+    def read_chunk_baseline(self, sample: zarr.Group, coords, time_coords):
+        coords.update(
+            {
+                dim: (
+                    self.samples.samples[os.path.join(sample, dim)]
+                    if not dim == "datetime"
+                    else time_coords
+                )
+                for dim in self.dims
+            }
+        )
+        data = self.samples.samples[os.path.join(sample, "data")]
+        # print(data.shape, self.dims, coords)
+        sample_da = xr.DataArray(
+            np.swapaxes(data, 0, 1),
+            coords=coords,
+            dims=self.dims,
+            name=f"specific_humidity_{sample.replace('=', '')}",
+        )
+        return sample_da
+
+    def merge_chunks_baseline(
+        self, global_data: xr.DataArray, da_list: list[zarr.Group]
+    ):
+        for sample in da_list:
+            global_data.loc[
+                {
+                    "datetime": sample["datetime"],
+                    "lat": sample["lat"],
+                    "lon": sample["lon"],
+                }
+            ] = sample
