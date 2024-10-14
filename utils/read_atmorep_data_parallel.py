@@ -6,9 +6,14 @@ import collections
 import functools
 import os
 import typing
+import dataclasses
 
 
-Sample = collections.namedtuple("Sample", ["coords", "data"])
+@dataclasses.dataclass
+class Sample:
+    coords: dict[str, zarr.Array]
+    data: zarr.Array
+
 IndexRange = collections.namedtuple("IndexRange", ["start", "end"])
 
 
