@@ -135,11 +135,7 @@ class ChunkedData:
         for idx, datetimes in index_datetimes:
             sample_times[idx] = datetimes
 
-        return np.unique(sample_times, return_inverse=True, axis=0)
-
-   
-
-    
+        return np.unique(sample_times, return_inverse=True, axis=0)    
 
     def load_chunk(self, chunk: xr.DataArray) -> xr.DataArray:
         forecast_time = chunk["datetime"].values[-1]
