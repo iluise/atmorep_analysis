@@ -8,6 +8,8 @@ import os
 import typing
 import dataclasses
 import itertools as it
+import typing
+import collections.abc
 
 
 @dataclasses.dataclass
@@ -29,7 +31,7 @@ class Sample:
 IndexRange = collections.namedtuple("IndexRange", ["start", "end"])
 
 
-class Samples:
+class Samples(collections.abc.Sequence):
     def __init__(self, path: pl.Path, field: str):
         self.field = field
         
@@ -39,7 +41,7 @@ class Samples:
         store = zarr.ZipStore(path)
         self.samples = zarr.group(store)[self.field]
 
-        example_sample = self.get_sample(0) # assume sample idx 0 always present
+        example_sample = self[0] # assume sample idx 0 always present
         self.dims = list(example_sample.coords.keys())
         self.shape = [example_sample.coords[dim].size for dim in self.dims]
         self.size = len(self.samples)
@@ -51,6 +53,24 @@ class Samples:
             example_sample.coords["lat"][1] - example_sample.coords["lat"][0]
         )
         self.levels = example_sample.coords["ml"]
+        
+    def __getitem__(self, key):
+        match key:
+            case int():
+                return self.get_formatted_sample(key)
+            case slice():
+                # TODO: support slicing
+                msg = "slicing is not implemented yet"
+                raise NotImplementedError(msg)
+            case _:
+                msg = f"indices must be integers or slices, not {type(key)}"
+                raise TypeError(msg)
+    
+    def __len__(self):
+        return self.size
+    
+    def get_formatted_sample(self, idx):
+        return self.get_sample(idx)
 
     def get_sample_idxs(self, chunk_idx: int):
         return self.sample_idxs[self.inverse == chunk_idx]
@@ -87,6 +107,32 @@ class EnsembleSamples(Samples):
 
         return Sample(coords, sample["data"], name)
 
+class UnstructuredSamples(Samples):
+    def __init__(self, path: pl.Path, field: str, m_lvl: int):
+        self.m_lvl = m_lvl
+        super().__init__(path, field)
+
+    def get_sample(self, idx) -> Sample:
+        # TODO: ensemble ??
+        sample = self.samples[self.as_key(idx)]
+        sample_m_lvl = sample[f"ml={self.m_lvl:05d}"]
+
+        coords = {
+            ("itoken", "t"): sample_m_lvl["datetime"],
+            ("itoken", "y"): sample_m_lvl["lat"],
+            ("itoken", "x"): sample_m_lvl["lon"],
+            "itoken": range(sample_m_lvl.shape[0]),
+            "t": range(sample_m_lvl.shape[1]),
+            "x": range(sample_m_lvl.shape[2]),
+            "y": range(sample_m_lvl.shape[3]),
+        }
+        name = f"{self.field}_ml{self.m_lvl:05d}_sample{idx:05d}"
+        dims = ["itoken", "t", "y", "x"]
+        
+        return Sample(coords, sample_m_lvl["data"], name, dims=dims)
+    
+    def get_formatted_sample(self, idx):
+        return super().get_formatted_sample(idx).as_data_array()
 
 
 class ChunkedData:
