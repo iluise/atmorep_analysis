@@ -146,8 +146,6 @@ class ChunkedData:
         self.dims = self.samples.dims
         self.dy, self.dx = self.samples.dy, self.samples.dx
 
-        example_sample = self.samples.get_sample(0)
-
         self.global_coords = self.get_global_coords()
 
         self.shape = [self.global_coords[dim].size for dim in self.dims]
@@ -251,7 +249,7 @@ class ChunkedData:
 
     def _get_chunk_samples(self, chunk_idx: int):
         sample_idxs = self._get_samples_idxs(chunk_idx)
-        return [self.samples.get_sample(idx) for idx in sample_idxs]
+        return [self.samples[idx] for idx in sample_idxs]
 
     @functools.cache
     def _get_samples_idxs(self, chunk_idx: int):
