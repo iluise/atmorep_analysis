@@ -14,6 +14,17 @@ import itertools as it
 class Sample:
     coords: dict[str, zarr.Array]
     data: zarr.Array
+    name: str
+    dims: typing.Optional[list[str]] = None
+
+    def __post_init(self):
+        if self.dims is None:
+            self.dims = list(self.coords.keys()) # dicts retain insertion order 3.7+s
+
+    def as_data_array(self) -> xr.DataArray:
+        return xr.DataArray(
+            self.data, coords=self.coords, dims=self.dims, name=self.name
+        )
 
 IndexRange = collections.namedtuple("IndexRange", ["start", "end"])
 
@@ -56,8 +67,9 @@ class Samples:
             "lat": sample["lat"],
             "lon": sample["lon"]
         }
+        name = f"{self.field}_sample{idx:05d}"
 
-        return Sample(coords, sample["data"])
+        return Sample(coords, sample["data"], name)
 
 
 class EnsembleSamples:
@@ -70,8 +82,10 @@ class EnsembleSamples:
             "lat": sample["lat"],
             "lon": sample["lon"],
         }
+        name = f"{self.field}_sample{idx:05d}"
 
-        return Sample(coords, sample["data"])
+        return Sample(coords, sample["data"], name)
+
 
 
 class ChunkedData:
