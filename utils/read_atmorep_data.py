@@ -8,6 +8,7 @@ import xarray as xr
 import pathlib as pl
 import dask.array as da
 import sys
+import collections.abc
 
 sys.path.append(pl.Path(__file__).parent)
 from utils.read_atmorep_data_parallel import Samples, ChunkedData, UnstructuredSamples
@@ -290,22 +291,30 @@ class HandleAtmoRepDataDask(HandleAtmoRepData):
             data_type in self.known_data_types
         ), f"Data type '{data_type}' is unknown. Chosse one of the following: '{', '.join(self.known_data_types)}'"
 
+        filenames = self.get_hierarchical_sorted_files(data_type, epoch)
+        data_path = pl.Path(filenames[0])
+
         # TODO extend readable masking modes
-        if self.config["BERT_strategy"] == "global_forecast":
-            filenames = self.get_hierarchical_sorted_files(data_type, epoch)
-            data_path = pl.Path(filenames[0])
-            da = self._read_data_parallel(data_path, varname, compute)
-        else:
-            msg = f"Handling data with sampling strategy '{self.config['BERT_strategy']}' is not supported yet."
-            raise ValueError(msg)
+        match self.config["BERT_strategy"]:
+            case "global_forecast":
+                data = self._read_global_data_parallel(data_path, varname, compute)
+            case "BERT" | "temporal_interpolation":
+                data = self._read_unstructured_data_parallel(
+                    data_path, varname, kwargs["ml"]
+                )
+            case _:
+                msg = f"Handling data with sampling strategy '{self.config['BERT_strategy']}' is not supported yet."
+                raise ValueError(msg)
 
-        return da
+        return data
 
-    def _read_data_parallel(self, datapath: pl.Path, varname: str, compute: bool):
+    def _read_global_data_parallel(
+        self, datapath: pl.Path, varname: str, compute: bool
+    ) -> xr.DataArray:
         samples = Samples(datapath, varname)
         print(samples.size)
         chunky = ChunkedData(samples)
-        
+
         print("target shape: ", chunky.shape)
         print("target chunks: ", chunky.chunks)
 
