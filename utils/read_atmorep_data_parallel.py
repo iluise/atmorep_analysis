@@ -31,11 +31,13 @@ IndexRange = collections.namedtuple("IndexRange", ["start", "end"])
 
 class Samples:
     def __init__(self, path: pl.Path, field: str):
+        self.field = field
+        
         self.sample_key_prefix = "sample="
         self.sample_idx_format = r"{:05d}"
         
         store = zarr.ZipStore(path)
-        self.samples = zarr.group(store)[field]
+        self.samples = zarr.group(store)[self.field]
 
         example_sample = self.get_sample(0) # assume sample idx 0 always present
         self.dims = list(example_sample.coords.keys())
