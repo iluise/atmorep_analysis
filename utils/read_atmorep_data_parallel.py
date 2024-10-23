@@ -71,8 +71,7 @@ class Samples:
 
         return Sample(coords, sample["data"], name)
 
-
-class EnsembleSamples:
+class EnsembleSamples(Samples):
     def get_sample(self, idx) -> Sample:
         sample = self.samples[self.as_key(idx)]
         coords = {
