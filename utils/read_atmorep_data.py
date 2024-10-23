@@ -10,8 +10,7 @@ import dask.array as da
 import sys
 
 sys.path.append(pl.Path(__file__).parent)
-from utils.read_atmorep_data_parallel import Samples, ChunkedData
-
+from utils.read_atmorep_data_parallel import Samples, ChunkedData, UnstructuredSamples
 
 
 class HandleAtmoRepData(object):
@@ -319,11 +318,8 @@ class HandleAtmoRepDataDask(HandleAtmoRepData):
 
         return loaded_data
 
-    def _get_file(self):
-        model_id = "idcp73kj9o"
-        epoch = 0
-        varname = "specific_humidity"
-        lead_time = 6
-
-        filename = f"results_{model_id}_epoch{epoch:05d}_pred.zarr"
-        datapath = pl.Path(model_id) / filename
+    def _read_unstructured_data_parallel(
+        self, datapath: pl.Path, varname: str, m_lvl
+    ) -> collections.abc.Sequence:
+        # imitates list, doesnt support slicing yet
+        return UnstructuredSamples(datapath, varname, m_lvl)
