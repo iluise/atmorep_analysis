@@ -249,7 +249,7 @@ class ChunkedData:
 
     def _get_chunk_samples(self, chunk_idx: int):
         sample_idxs = self._get_samples_idxs(chunk_idx)
-        return [self.samples[idx] for idx in sample_idxs]
+        return [self.samples.get_sample(idx) for idx in sample_idxs]
 
     @functools.cache
     def _get_samples_idxs(self, chunk_idx: int):
