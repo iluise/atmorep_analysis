@@ -160,6 +160,9 @@ class ChunkedData:
         start = self._forecast_times.min() - np.timedelta64(self.lead_time, "h")
         end = self._forecast_times.max()
 
+        # TODO Fehler beim laden von nicht kontinuierlicher Zeitachse: get_global_coordinates in ChunkedData assumes continuous time axis. 
+        # FIX: see if time chunks are non overlapping else issue warning/error, see if time chunks are continuous else build a discontiuous 
+        # time axis (to be implemented)
         times = np.arange(start, end, np.timedelta64(1, "h"), dtype="datetime64[ns]")
         times += np.timedelta64(1, "h")
 
