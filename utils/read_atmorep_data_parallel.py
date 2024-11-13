@@ -157,15 +157,7 @@ class ChunkedData:
         self._lat_padding = self.samples.shape[3] # use one entire sample as padding
 
     def get_global_coords(self):
-        start = self._forecast_times.min() - np.timedelta64(self.lead_time, "h")
-        end = self._forecast_times.max()
-
-        # TODO Fehler beim laden von nicht kontinuierlicher Zeitachse: get_global_coordinates in ChunkedData assumes continuous time axis. 
-        # FIX: see if time chunks are non overlapping else issue warning/error, see if time chunks are continuous else build a discontiuous 
-        # time axis (to be implemented)
-        times = np.arange(start, end, np.timedelta64(1, "h"), dtype="datetime64[ns]")
-        times += np.timedelta64(1, "h")
-
+        times = self.time_chunks.ravel()
         lats = np.linspace(-90.0, 90.0, num=int(180 / self.dy) + 1, endpoint=True)
         lons = np.linspace(0, 360, num=int(360 / self.samples.dx), endpoint=False)
 
