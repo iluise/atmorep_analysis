@@ -1,3 +1,23 @@
+# SPDX-FileCopyrightText: 2024 Earth System Data Exploration (ESDE), Jülich Supercomputing Center (JSC), European Centre for Medium-Range Weather Forecasts (ECMWF), 
+#                              European Organization for Nuclear Research (CERN) - IT
+#
+# SPDX-License-Identifier: MIT
+
+__authors__ = "Michael Langguth"
+__email__ = "m.langguth@fz-juelich.de"
+__date__ = "2023-07"
+__update__ = "2025-01-13"
+
+"""
+Collection of useful metrics to evaluate the performance of the predictions
+
+NOTE:
+The properscoring-package which is utilized by xskillscore requires numba to work efficiently.
+On JSC clusters, ensure to load the numba module before running the script.
+
+"""
+##########################################
+
 import sys
 sys.path.append("./")
 try:
@@ -16,16 +36,6 @@ from xhistogram.xarray import histogram
 da_or_ds = Union[xr.DataArray, xr.Dataset]
 str_or_list = Union[str, List[str]]
 
-"""
-Collection of useful metrics to evaluate the performance of the predictions
-Credits to: AtmoRep collaboration
-Date: July 2023
-
-The properscoring-package which is utilized by xskillscore requires numba to work efficiently.
-On JSC clusters, ensure to load the numba module before running the script.
-
-"""
-##########################################
 
 def calc_scores_item(pred, target, ens, scores, options, avg = []):
     score_engine = Scores(pred, target, ens, avg_dims = avg)

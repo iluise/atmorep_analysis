@@ -1,13 +1,19 @@
-"""
-Methods for creating plots.
-"""
+# SPDX-FileCopyrightText: 2024 Earth System Data Exploration (ESDE), Jülich Supercomputing Center (JSC), European Centre for Medium-Range Weather Forecasts (ECMWF), 
+#                              European Organization for Nuclear Research (CERN) - IT
+#
+# SPDX-License-Identifier: MIT
+
 
 __authors__ = "Ilaria Luise, Michael Langguth"
 __email__ = "ilaria.luise@cern.ch"
 __date__ = "2023-12-20"
 __update__ = "2025-01-13"
 
-# for processing data
+"""
+Methods for creating plots.
+"""
+
+# import Python packages for processing data and plotting
 import os
 from pathlib import Path
 import logging
