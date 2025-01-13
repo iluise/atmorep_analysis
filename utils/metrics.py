@@ -8,10 +8,9 @@ except:
 
 import xarray as xr
 import numpy as np
-import matplotlib.pyplot as plt
-from typing import List
-
 from typing import Union, List
+import xskillscore
+from xhistogram.xarray import histogram
 
 # basic data types
 da_or_ds = Union[xr.DataArray, xr.Dataset]
@@ -21,6 +20,9 @@ str_or_list = Union[str, List[str]]
 Collection of useful metrics to evaluate the performance of the predictions
 Credits to: AtmoRep collaboration
 Date: July 2023
+
+The properscoring-package which is utilized by xskillscore requires numba to work efficiently.
+On JSC clusters, ensure to load the numba module before running the script.
 
 """
 ##########################################
@@ -139,30 +141,36 @@ class Scores:
     Class to calculate scores and skill scores.
     """
 
-    def __init__(self, data_fcst: xr.DataArray, data_ref: xr.DataArray, data_ens: xr.DataArray,  avg_dims: str_or_list = "all"):
+    def __init__(self, data_fcst: xr.DataArray, data_ref: xr.DataArray, data_ens: xr.DataArray,  avg_dims: str_or_list = "all", ens_dim: str = "ens"):
         """
         :param data_fcst: forecast data to evaluate 
         :param data_ref: reference or ground truth data
         :param avg_dims: dimension or list of dimensions over which scores shall be averaged. 
                          Parse 'all' to average over all data dimensions.
         """
-        self.metrics_dict = {"ets": self.calc_ets, "pss": self.calc_pss, "fbi": self.calc_fbi,
-                             "mae": self.calc_mae, "l1": self.calc_l1, "l2": self.calc_l2, 
-                             "mse": self.calc_mse, "rmse": self.calc_rmse, "bias": self.calc_bias,
-                             "acc": self.calc_acc, "bias": self.calc_bias, "spread" : self.calc_spread, 
-                             "ssr": self.calc_ssr, "grad_amplitude": self.calc_spatial_variability,
-                             "psnr": self.calc_psnr, "iqd": self.calc_iqd, "seeps": self.calc_seeps} 
-        self.data_fcst = data_fcst
-        self.data_dims = list(self.data_fcst.dims)
+        self.det_metrics_dict = {"ets": self.calc_ets, "pss": self.calc_pss, "fbi": self.calc_fbi,
+                                "mae": self.calc_mae, "l1": self.calc_l1, "l2": self.calc_l2, 
+                                "mse": self.calc_mse, "rmse": self.calc_rmse, "bias": self.calc_bias,
+                                "acc": self.calc_acc, "bias": self.calc_bias, "spread" : self.calc_spread, 
+                                "ssr": self.calc_ssr, "grad_amplitude": self.calc_spatial_variability,
+                                "psnr": self.calc_psnr, "iqd": self.calc_iqd, "seeps": self.calc_seeps} 
+        self.prob_metrics_dict = {"crps": self.calc_seeps, "rank_histoogram": self.calc_rank_histogram}
+        
+        self.ens_dim = ens_dim
+        self.prob_fcst = True if self.ens_dim in self.data_fcst.dims else False
+        self.joint_data_dims = [dim for dim in self.data_fcst.dims if dim != self.ens_dim]    # excludes ensemble-dimension for probablistic forecasts
         self.data_ref = data_ref
-        self.data_ens = data_ens
+
         self.avg_dims = avg_dims
+
+        self.metrics_dict = self.prob_metrics_dict if self.prob_fcst else self.det_metrics_dict
 
     def __call__(self, score_name, **kwargs):
         try:
             score_func = self.metrics_dict[score_name]
         except:
-            raise ValueError(f"{score_name} is not an implemented score." +
+            score_family = "probablistic" if self.prob_fcst else "deterministic"  
+            raise ValueError(f"{score_name} is not an implemented {score_family} score." +
                              "Choose one of the following: {0}".format(", ".join(self.metrics_dict.keys())))
 
         return score_func(**kwargs)
@@ -187,10 +195,10 @@ class Scores:
         if not isinstance(da_ref, xr.DataArray):
             raise ValueError("data_fcst must be a xarray DataArray.")
 
-        if not list(da_ref.dims) == self.data_dims:
+        if not list(da_ref.dims) == self.joint_data_dims:
             raise ValueError("Dimensions of data_fcst and data_ref must match, but got:" +
                              "[{0}] vs. [{1}]".format(", ".join(list(da_ref.dims)),
-                                                      ", ".join(self.data_dims)))
+                                                      ", ".join(self.joint_data_dims)))
 
         self._data_ref = da_ref
 
@@ -203,16 +211,16 @@ class Scores:
         if dims is None:
             self._avg_dims = None
         elif dims == "all":
-            self._avg_dims = self.data_dims
+            self._avg_dims = self.joint_data_dims
             # print("Scores will be averaged across all data dimensions.")
         else:
-            dim_stat = [avg_dim in self.data_dims for avg_dim in dims]
+            dim_stat = [avg_dim in self.joint_data_dims for avg_dim in dims]
             if not all(dim_stat):
                 ind_bad = [i for i, x in enumerate(dim_stat) if not x]
                 raise ValueError("The following dimensions for score-averaging are not " +
                                  "part of the data: {0}".format(", ".join(np.array(dims)[ind_bad])))
 
-            self._avg_dims = dims
+            self._avg_dims = dims      
 
     def get_2x2_event_counts(self, thresh):
         """
@@ -225,6 +233,7 @@ class Scores:
 
         return a, b, c, d
 
+    ### Deterministic scores
     def calc_ets(self, thresh=0.1):
         a, b, c, d = self.get_2x2_event_counts(thresh)
         n = a + b + c + d
@@ -558,6 +567,66 @@ class Scores:
             seeps_values = seeps_values_all
 
         return seeps_values
+    
+    ### Probablistic scores
+    def calc_crps(self, method: str="ensemble", **kwargs):
+        """
+        Wrapper around CRPS-methods provided by xskillscore-package.
+        See https://xskillscore.readthedocs.io/en/stable/api
+        :param method: Method to calculate CRPS. Supported methods: ["ensemble", "gaussian"]
+        :param kwargs: Other keyword parameters supported by respective CRPS-method
+        :return: calculated CRPS
+        """
+        crps_methods = ["ensemble", "gaussian"]
+
+        assert "ens" in self.data_fcst.dims, "Forecast data array must have an 'ens'-dimension."
+
+        if method == "ensemble":
+            func_kwargs = {"forecasts": self.data_fcst, "member_dim": self.ens_dim, "dim": self.avg_dims, **kwargs}
+            crps_func = xskillscore.crps_ensemble
+        elif method == "gaussian": 
+            func_kwargs = {"mu": self.data_fcst.mean(dim=self.ens_dim), "sig": self.data_fcst.std(dim=self.ens_dim), "dim": self.avg_dims, **kwargs}
+            crps_func = xskillscore.crps_gaussian
+        else:
+            f"Unsupported CRPS-calculation method {method} chosen. Supported methods: {', '.join(crps_methods)}"
+
+        crps = crps_func(self.data_ref, **func_kwargs)
+
+        return crps
+
+    def calc_rank_histogram(self, norm: bool = True, add_noise: bool = True, noise_fac = 1.e-03):
+        """
+        :param norm: Flag if normalized counts should be returned
+        :param add_noise: Add unsignificant amount of random noise to data for fair computations, cf. Sec. 4.2.2 in Harris et al. 2022
+        :param noise_fac: magnitude of random noise (only relevant if add_noise == True)
+        """
+        # stack data along averaging dimensions
+        obs_stacked = self.data_ref.stack({"npoints": self.avg_dims})
+        fcst_stacked = self.data_fcst.stack({"npoints": self.avg_dims})
+
+        print(fcst_stacked)
+
+        # add noise to data if desired
+        if add_noise:
+            print("Add noise")
+            rng = np.random.default_rng()
+    
+            obs_stacked += rng.random(size=obs_stacked.shape, dtype=np.float32)*noise_fac
+            fcst_stacked += rng.random(size=fcst_stacked.shape, dtype=np.float32)*noise_fac
+
+        # calculate ranks for all data points 
+        rank = (obs_stacked >= fcst_stacked).sum(dim='ens')
+        # and count occurence of rank values
+        rank.name = "rank"                      # name for xr.DataArray is required for histogram-method
+        rank_counts = histogram(rank, dim=["npoints"], bins=np.arange(len(fcst_stacked[self.ens_dim]) + 2), 
+                                block_size=None if rank.chunks is None else "auto")
+
+        # provide normalized rank counts if desired
+        if norm:
+            npoints = len(fcst_stacked["npoints"])
+            rank_counts = rank_counts/npoints 
+        
+        return rank_counts
     
     @staticmethod
     def calc_geo_spatial_diff(scalar_field: xr.DataArray, order: int = 1, r_e: float = 6371.e3, dom_avg: bool = True):
