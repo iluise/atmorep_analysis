@@ -2,18 +2,21 @@
 Methods for creating plots.
 """
 
-__authors__ = "Ilaria Luise"
+__authors__ = "Ilaria Luise, Michael Langguth"
 __email__ = "ilaria.luise@cern.ch"
 __date__ = "2023-12-20"
-__update__ = "2023-12-22"
+__update__ = "2025-01-13"
 
 # for processing data
 import os
+from pathlib import Path
 import logging
+from typing import Union, List, Dict, Any
 import numpy as np
 import xarray as xr
 import pandas as pd
 from itertools import product
+from xhistogram.xarray import histogram
 
 # for plotting
 import matplotlib as mpl
@@ -32,6 +35,10 @@ from analysis.utils.utils import get_units
 # auxiliary variable for logger
 module_name = os.path.basename(__file__).rstrip(".py")
 
+str_or_path = Union[str, Path]  # type hint for string or Path objects
+
+########################################
+# Auxiliary functions
 ########################################
 
 def CustomPalette():
@@ -59,6 +66,26 @@ def MathematicaPalette():
           ]
   cmap = mcolors.LinearSegmentedColormap.from_list('MathCol', colors, N=len(colors))
   return cmap
+
+def get_cmap_norm(levels, cb_name: str = "PuOr_r", cb_range= (0., 1.)):
+    """
+    Get the colormap and norm-object for given levels and a given colorbar-name
+    :param levels: level boundaries
+    :param cb_name: name of colorbar 
+    :return cmap: colormap-object
+    :return norm: normalization object corresponding to colormap and levels
+    """
+    bounds = np.asarray(levels)
+    nbounds = len(bounds)
+    
+    col_obj = plt.get_cmap(cb_name)
+    col_obj = col_obj(np.linspace(*cb_range, nbounds)) 
+
+    # create colormap and corresponding norm
+    cmap = mpl.colors.ListedColormap(col_obj)
+    norm = mpl.colors.BoundaryNorm(bounds, cmap.N)
+
+    return cmap, norm
 
 
 ########################################
@@ -297,3 +324,311 @@ def save_ims( dir_out, field, data, name, min_val = 1., max_val = -1.) :
   plt.imsave( fname, data, vmin=min_val, vmax=max_val, cmap = cmap )
   plt.close()
     # print( 'Finished saving figures for step={}, tidx = {}.'.format( epoch, tidx) )
+
+##############################################
+# Plot routines used in the downscaling evaluation pipeline
+##############################################
+
+def mapplot_comparison_ens(data_ref: xr.DataArray, data_fcst: xr.DataArray, plt_fname: str_or_path, lshow: bool=True,
+                           ens_name: str = "ens", **plt_kwargs):
+    """
+    Plot geographical reference/ground truth data and data from n ensemble members in a column
+    :param data_ref: ground truth data
+    :param data_fcst: forecast data with ensemble dimension (see ens_name-parameter)
+    :param plt_fname: path to png-file where plot will be saved
+    :param lshow: flag to show plot (in a Jupyter Notebook)
+    :param ens_name: ensemble dimension name of data_fcst
+    :param plt_kwargs: other plot parameters
+                       valid parameter keys are:
+                       - nens: number of ensemble members to plot (default: 3)
+                        - figsize: figure size (default: (9, 6*nens))
+                        - aspect_ratio: aspect ratio of the map (default: 2./3.)
+                        - projection: cartopy projection-object used for the map (default: ccrs.PlateCarree())
+                        - transform: cartopy transform-object used for the data (default: copied from projection-parameter)
+                        - cmap_name: name of the colormap used for the plot (default: "coolwarm")
+                        - levels: levels for the colormap (default: np.arange(-30, 31, 2))
+                        - cmap_range: range for the colormap (default: (0., 1.))
+                        - extent: geographical extent of the map [west, east, south, north] in degree (default: [-25, 40, 20, 75])
+                        - unit: unit of the data (default: "kg m**-2")
+                        - titles: list of titles for the two plots (default: None)
+                        - sup_title: super title for the plot (default: None)
+                        - fs: basic font size used in plot labels (default: 14)
+    """
+    nens = plt_kwargs.pop("nens", 3)
+    figsize = plt_kwargs.pop("figsize", (9, 6*nens))
+    aspect = plt_kwargs.pop("aspect_ratio", 2./3.)
+    proj = plt_kwargs.pop("projection", ccrs.PlateCarree())
+    transform = plt_kwargs.pop("transform", proj)
+    cmap_name = plt_kwargs.pop("cmap_name", "coolwarm")
+    levels = plt_kwargs.pop("levels", np.arange(-30, 31, 2))
+    cb_range = plt_kwargs.pop("cmap_range", (0., 1.))
+    extent = plt_kwargs.pop("extent", [-25, 40, 20, 75])
+    unit = plt_kwargs.pop("unit", "kg m**-2")
+    titles = plt_kwargs.pop("titles", None)
+    suptitle = plt_kwargs.pop("sup_title", None)
+    fs = plt_kwargs.pop("fs", 14)
+
+    # Create a figure and an axes with a map projection
+    fig, axes = plt.subplots(nens + 1, 1, subplot_kw={'projection': proj}, figsize=figsize)
+    
+    cmap, norm = get_cmap_norm(levels, cmap_name, cb_range= cb_range)
+
+    data_ens = [data_fcst.isel({ens_name: iens}) for iens in range(nens)]
+    
+    for idx, (data, ax) in enumerate(zip([data_ref]  + data_ens, axes)):
+        # Add map features for context
+        ax.coastlines()
+        # Add gridlines and customize labels
+        gl = ax.gridlines(draw_labels=True)
+        #gl.left_labels = True 
+        gl.right_labels = False
+        gl.top_labels = False
+
+        data = data_ref if idx == 0 else data_fcst.isel({"ens": idx - 1})
+        
+        # Plot the data using contourf
+        contour = ax.contourf(data["lon"], data["lat"], data, transform=transform,
+                              cmap=cmap, norm=norm, levels=levels)
+
+        ax.set_extent(extent, crs=ccrs.PlateCarree())
+        ax.set_aspect(aspect)
+        # control axis labels and the fontsizes
+        ax.set_xlabel("Longitude", fontsize=fs)  
+        ax.set_ylabel("Latitude", fontsize=fs)
+        ax.tick_params(labelsize=fs-2)
+
+        # Set title if provided
+        if titles and idx < len(titles):
+            ax.set_title(titles[idx], fontsize=fs)
+    
+    # Add a shared colorbar for all plots
+    cbar_ax = fig.add_axes([0.05, 0.01, 0.9, 0.015])  # [left, bottom, width, height]
+    cbar = fig.colorbar(contour, cax=cbar_ax, orientation='horizontal', pad=0.05, ticks=levels, shrink=0.8)
+    cbar.set_label(unit)
+    
+    # Adjust spacing between plots
+    fig.subplots_adjust(left=0.05, right=0.95, top=0.95, bottom=0.05, hspace=0.2)
+    if suptitle:
+        plt.suptitle(suptitle, fontsize=fs+2)
+
+    if lshow:
+        plt.show()
+
+    # save plot and close figure
+    plt_fname = Path(plt_fname)
+    plt_fname = plt_fname + ".png" if not plt_fname.suffix == ".png" else plt_fname
+    print(f"Save plot in file '{plt_fname}'")
+    fig.savefig(plt_fname, bbox_inches="tight")
+    plt.close(fig)
+
+def mapplot_comparison_det(data1: xr.DataArray, data2: xr.DataArray, plt_fname: str_or_path, lshow: bool=False, **plt_kwargs):
+    """
+    Plot two geographical data arrays on a map next to each other for comparison
+    :param data1: first data array to plot
+    :param data2 first data array to plot
+    :param plt_fname: path to png-file where plot will be saved
+    :param lshow: flag to show plot (set to True in a Jupyter Notebook)
+    :param plt_kwargs: other plot parameters
+                       valid parameter keys are:
+                        - figsize: figure size (default: (12, 6))
+                        - projection: cartopy projection-object used for the map (default: ccrs.PlateCarree())
+                        - transform: cartopy transform-object used for the data (default: copied from projection-parameter)
+                        - cmap_name: name of the colormap used for the plot (default: "coolwarm")
+                        - levels: levels for the colormap (default: np.arange(-30, 31, 2))
+                        - cmap_range: range for the colormap (default: (0., 1.))
+                        - extent: geographical extent of the map [west, east, south, north] in degree (default: [-25, 40, 20, 75])
+                        - unit: unit of the data (default: "kg m**-2")
+                        - titles: list of titles for the two plots (default: None)
+                        - fs: basic font size used in plot labels (default: 14)
+
+    """
+    figsize = plt_kwargs.pop("figsize", (12, 6))
+    proj = plt_kwargs.pop("projection", ccrs.PlateCarree())
+    transform = plt_kwargs.pop("transform", proj)
+    cmap_name = plt_kwargs.pop("cmap_name", "coolwarm")
+    levels = plt_kwargs.pop("levels", np.arange(-30, 31, 2))
+    cb_range = plt_kwargs.pop("cmap_range", (0., 1.))
+    extent = plt_kwargs.pop("extent", [-25, 40, 20, 75])
+    unit = plt_kwargs.pop("unit", "kg m**-2")
+    titles = plt_kwargs.pop("titles", None)
+    fs = plt_kwargs.pop("fs", 14)
+
+    # Create a figure and an axes with a map projection
+    fig, axes = plt.subplots(1, 2, subplot_kw={'projection': proj}, figsize=figsize)
+    
+    cmap, norm = get_cmap_norm(levels, cmap_name, cb_range= cb_range)
+    
+    for idx, (data, ax) in enumerate(zip([data1, data2], axes)):
+        # Add map features for context
+        ax.coastlines()
+        # Add gridlines and customize labels
+        gl = ax.gridlines(draw_labels=True)
+        gl.right_labels = idx == 1  # Only show right labels for the second plot
+        gl.left_labels = idx == 0   # Only show left labels for the first plot
+
+        # Plot the data using contourf
+        contour = ax.contourf(data["lon"], data["lat"], data, transform=transform,
+                              cmap=cmap, norm=norm, levels=levels)
+
+        ax.set_extent(extent, crs=ccrs.PlateCarree())
+        # control axis labels and the fontsizes
+        ax.set_xlabel("Longitude", fontsize=fs)  
+        ax.set_ylabel("Latitude", fontsize=fs)
+        ax.tick_params(labelsize=fs-2)
+        
+        # Set title if provided
+        if titles and idx < len(titles):
+            ax.set_title(titles[idx], fontsize=fs)
+    
+    # Add a shared colorbar for both plots
+    cbar = fig.colorbar(contour, ax=axes, orientation='horizontal', pad=0.05, ticks=levels, shrink=0.8)
+    cbar.set_label(unit)
+    # Add a colorbar
+    #cbar = plt.colorbar(contour, ax=ax, orientation='horizontal', pad=0.05, ticks=levels)
+    #cbar.set_label(unit)
+    
+    if lshow:
+        plt.show()
+
+    # save plot and close figure
+    plt_fname = Path(plt_fname)
+    plt_fname = plt_fname + ".png" if not plt_fname.suffix == ".png" else plt_fname
+    print(f"Save plot in file '{plt_fname}'")
+    fig.savefig(plt_fname, bbox_inches="tight")
+    plt.close(fig)
+
+def plot_histogram(data1: xr.DataArray, data2: xr.DataArray, plt_fname: str_or_path, ens_dim: str = "ens" ,lshow: bool =False, **plt_kwargs):
+    """
+    Plot histogram of two data arrays next to each other.
+    :param data1: first data array for which histogram shall be created
+    :param data2 first data array for which histogram shall be created
+    :param plt_fname: path to png-file where plot will be saved
+    :param ens_name: ensemble dimension name of data_fcst
+    :param lshow: flag to show histogram plot (set to True in a Jupyter Notebook)
+    :param plt_kwargs: other histogram parameters
+                        valid parameter keys are:
+                        - bins: bins for histogram
+                        - legend_labels: labels for the two histograms
+                        - figsize: figure size (default: (9, 6))
+                        - log_scale: flag for log-scale on y-axis (default: True)
+                        - bar_colors: colors for the bars (default: ["blue", "green"])
+                        - xlabel: x-axis label (default: "Precipitation Bins")
+                        - plt_title: title of the plot (default: "Histogram of Hourly Precipitation")
+                        - fs: basic font size used in plot labels (default: 14)
+                        - bin_width: width of the bars plotted in the histogram (default: 0.8)
+    """
+    # get plot parameters
+    bins_hist = plt_kwargs.pop("bins")
+    legend_labels = plt_kwargs.pop("legend_labels")
+    figsize = plt_kwargs.pop("figsize", (9, 6))
+    yscale_log = plt_kwargs.pop("log_scale", True)
+    bar_cols = plt_kwargs.pop("bar_colors", ["blue", "green"])
+    xlabel = plt_kwargs.pop("xlabel", "Precipitation Bins")
+    plt_title = plt_kwargs.pop("plt_title", "Histogram of Hourly Precipitation")
+    fs = plt_kwargs.pop("fs", 14)
+    bin_width = plt_kwargs.pop("bin_width", .8)
+
+    # compute histogram data with awareness of ensemble-dimension
+    # setting block size to NaN for unchunked arrays ensures that blocksize does not become zero in xhistogram 
+    da1_hist = histogram(data1, bins=[bins_hist], dim=[dim for dim in data1.dims if dim != ens_dim], 
+                         block_size=None if data1.chunks is None else "auto")
+    da2_hist = histogram(data2, bins=[bins_hist], dim=[dim for dim in data1.dims if dim != ens_dim], 
+                         block_size=None if data2.chunks is None else "auto")
+
+    # average over ensemble-dim if present
+    if ens_dim in da1_hist.dims: da1_hist = da1_hist.mean(ens_dim)
+    if ens_dim in da1_hist.dims: da2_hist = da2_hist.mean(ens_dim)
+    
+    # Extract data and coordinates
+    bin_edges = da1_hist[list(da1_hist.coords)[0]].values
+    
+    # Plot histogram
+    fig, (ax) = plt.subplots(1, 1, figsize=figsize)
+    
+    offset = bin_width/4.
+    tick_pos = np.arange(len(bin_edges))
+    xlabels = [f"[{lvl}, {bins_hist[i+1]})" for i, lvl in enumerate(bins_hist[:-1])]
+    
+    # Plot first histogram 
+    hist1 = ax.bar(tick_pos - offset, da1_hist.values, width=bin_width / 2, label=legend_labels[0], color=bar_cols[0])
+    plt.xticks(tick_pos, xlabels)
+    
+    # Plot second histogram 
+    hist2 = ax.bar(tick_pos + offset, da2_hist.values, width=bin_width / 2, label=legend_labels[1], color=bar_cols[1])
+    
+    # Set y-axis to log scale
+    plt.legend()
+    if yscale_log:
+        plt.yscale('log')
+    
+    # Add labels and title
+    ax.set_xlabel(xlabel, fontsize=fs)
+    ax.set_ylabel('Frequency', fontsize=fs)
+    ax.set_title(plt_title, fontsize=fs)
+    ax.tick_params(axis='both', labelsize=fs-2)
+    
+    # Display the plot
+    if lshow:
+        plt.show()
+
+    # save plot and close figure
+    plt_fname = Path(plt_fname)
+    plt_fname = plt_fname + ".png" if not plt_fname.suffix == ".png" else plt_fname
+    print(f"Save plot in file '{plt_fname}'")
+    fig.savefig(plt_fname, bbox_inches="tight")
+    plt.close(fig)
+
+def plot_rank_histogram(rank_norm: xr.DataArray, plt_fname: str_or_path, lshow: bool = False, **plt_kwargs):
+    """
+    Plot normalized rank histogram.
+    :param rank_norm: normalized rank histogram data (from rank_histogram function of Scores class)
+    :param plt_fname: path to png-file where plot will be saved
+    :param lshow: flag to show plot (set to True in a Jupyter Notebook)
+    :param plt_kwargs: other plot parameters
+                        valid parameter keys are:
+                        - figsize: figure size (default: (9, 6))
+                        - line_color: color of the line plot (default: "blue")
+                        - linestyle: style of the line plot (default: "-")
+                        - marker: marker for the line plot (default: "")
+                        - xlabel: x-axis label (default: "Precipitation Bins")
+                        - plt_title: title of the plot (default: "Normalized Rank Histogram")
+                        - fs: basic font size used in plot labels (default: 14)
+    """
+    # get plot parameters
+    figsize = plt_kwargs.pop("figsize", (9, 6))
+    lc = plt_kwargs.pop("line_color", "blue")
+    ls = plt_kwargs.pop("linestyle", "-")
+    marker = plt_kwargs.pop("marker", "")
+    xlabel = plt_kwargs.pop("xlabel", "Precipitation Bins")
+    plt_title = plt_kwargs.pop("plt_title", 'Normalized Rank Histogram')
+    fs = plt_kwargs.pop("fs", 14)
+    
+    # Plot normalized histogram as a line plot
+    bin_centers = np.arange(rank_norm.size)/rank_norm.size
+    nranks = rank_norm.shape[0]
+    
+    fig, ax = plt.subplots(figsize=figsize)
+    ax.plot(bin_centers, rank_norm.values, marker=marker, linestyle=ls, color=lc, label=plt_title)
+    # plot reference line
+    ax.plot(bin_centers, np.repeat(1./nranks, nranks) , marker="", linestyle="--", color="green")
+    
+    # Labels and title
+    ax.set_xlabel(xlabel, fontsize=fs-2)
+    ax.set_ylabel('Normalized Frequency', fontsize=fs-2)
+    ax.set_title(plt_title, fontsize=fs)
+    ax.set_xticks(np.linspace(0, 1., 11))  # Ensure ticks match rank categories
+    
+    # Add grid for better readability
+    ax.grid(axis='y', linestyle='--', alpha=0.7)
+    
+    # Add legend
+    ax.legend()
+
+    if lshow:
+        plt.show()
+
+    # save plot and close figure
+    plt_fname = Path(plt_fname)
+    plt_fname = plt_fname.with_suffix(".png") if not plt_fname.suffix == ".png" else plt_fname
+    print(f"Save plot in file '{plt_fname}'")
+    fig.savefig(plt_fname, bbox_inches="tight")
