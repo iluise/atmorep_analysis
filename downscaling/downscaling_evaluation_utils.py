@@ -24,6 +24,8 @@ from ..utils.metrics import Scores
 
 str_or_path = Union[str, Path]
 
+# main evaluation functions
+
 def eval_deterministic_forecast(da_fcst: xr.DataArray, da_obs: xr.DataArray, outdir: str_or_path,
                                 eval_dict: Dict = {"scores": {"thresh_ets": [0.1, .5, 1.]},
                                                   "histogram": {"legend_labels": ["Harris WGAN", "IMERG"],
