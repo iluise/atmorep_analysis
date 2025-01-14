@@ -6,6 +6,7 @@ try:
 except:
     l_tqdm = False
 
+import dask.array as da
 import xarray as xr
 import numpy as np
 from typing import Union, List
@@ -608,11 +609,16 @@ class Scores:
 
         # add noise to data if desired
         if add_noise:
-            print("Add noise")
-            rng = np.random.default_rng()
-    
-            obs_stacked += rng.random(size=obs_stacked.shape, dtype=np.float32)*noise_fac
-            fcst_stacked += rng.random(size=fcst_stacked.shape, dtype=np.float32)*noise_fac
+            if obs_stacked.chunks is None and fcst_stacked.chunks is None:
+                # underlying arrays are numpy arrays -> use numpy's native random generator
+                rng = np.random.default_rng()
+                
+                obs_stacked += rng.random(size=obs_stacked.shape, dtype=np.float32)*noise_fac
+                fcst_stacked += rng.random(size=fcst_stacked.shape, dtype=np.float32)*noise_fac
+            else: 
+                # underlying arrays are dask arrays -> use dask's random generator
+                obs_stacked += da.random.random(size=obs_stacked.shape, chunks=obs_stacked.chunks)*noise_fac
+                fcst_stacked += da.random.random(size=fcst_stacked.shape, chunks=fcst_stacked.chunks)*noise_fac
 
         # calculate ranks for all data points 
         rank = (obs_stacked >= fcst_stacked).sum(dim='ens')
