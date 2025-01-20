@@ -6,7 +6,7 @@
 __authors__ = "Michael Langguth"
 __email__ = "m.langguth@fz-juelich.de"
 __date__ = "2024-12-16"
-__update__ = "2025-01-13"
+__update__ = "2025-01-20"
 
 """
 Methods used in the evaluation pipeline of the downscaling application.
@@ -26,29 +26,37 @@ str_or_path = Union[str, Path]
 
 # main evaluation functions
 
-def eval_deterministic_forecast(da_fcst: xr.DataArray, da_obs: xr.DataArray, outdir: str_or_path,
-                                eval_dict: Dict = {"scores": {"thresh_ets": [0.1, .5, 1.]},
-                                                  "histogram": {"legend_labels": ["Harris WGAN", "IMERG"],
-                                                                "bins": [0., .01, 0.1, 0.5, 1., 2., 5., 10., 15., 20], "figsize": (12, 8)}, 
-                                                  "comparison_map": {"nsamples_plot": 10, "cmap_name": "PuOr", "cmap_range": (.5, 1.), 
-                                                                     "levels": [0., 0.25, 0.5, 1., 1.5, 2.5, 5., 7.5, 10., 15., 20., 30., 50., 75.]}
-                                                  }):
+def eval_deterministic_downscaling(da_fcst: xr.DataArray, da_obs: xr.DataArray, outdir: str_or_path, model_name: str = "Harris WGAN", ens_dim: str = "ens",
+                                   eval_dict: Dict = {"scores": {"thresh_ets": [0.1, .5, 1.]},
+                                                      "histogram": {"legend_labels": ["Harris WGAN", "IMERG"],
+                                                                    "bins": [0., .01, 0.1, 0.5, 1., 2., 5., 10., 15., 20], "figsize": (12, 8)}, 
+                                                      "comparison_map": {"nsamples_plot": 10, "cmap_name": "PuOr", "cmap_range": (.5, 1.), 
+                                                                         "levels": [0., 0.25, 0.5, 1., 1.5, 2.5, 5., 7.5, 10., 15., 20., 30., 50., 75.]}
+                                                     }):
     """
-    Perform a deterministic forecast evaluation which involves the following:
+    Perform a deterministic downscaling evaluation which involves the following:
     * basic scores: RMSE, MAE, ETS
     * histograms
     * comparison plot
     Can be used for evaluating the ensemble mean or specific ensemble members.
     :param da_fcst: Data array providing deterministic forecasts
-    :param da_fcst: Data array providing the ground truth data/observation
+    :param da_obs: Data array providing the ground truth data/observation
+    :param model_name: Name of the model to be evaluated
+    :param ens_dim: name of ensemble dimension (only relevant of individual ensemble member should be evaluated)
     :param outdir: Base directory to store evaluation plots and data
-    :param eval_dict: Nested dictionary
+    :param eval_dict: Nested dictionary with sub-dictionaries for scores, histogram, comparison_map
     """
     outdir = Path(outdir) if not isinstance(outdir, Path) else outdir
     
     nsamples = len(da_fcst["time"])
-    fname_suffix = f"ens{da_fcst['ens'].values:d}" if da_fcst.name == "tot_prec_pred" else "mean"
-    title_model = f"Harris WGAN (ens_mem= {ens:d})" if da_fcst.name == "tot_prec_pred" else "Harris WGAN mean"
+
+    if ens_dim in da_fcst.dims:
+        ens = da_fcst[ens_dim].values
+        fname_suffix = f"ens{ens:d}"
+        title_model = f"{model_name} (ens_mem= {ens:d})"
+    else:
+        fname_suffix = f"mean"
+        title_model = f"{model_name} mean"
 
     ### Evaluation in terms of basic scores  
     # To-Do:
@@ -75,13 +83,13 @@ def eval_deterministic_forecast(da_fcst: xr.DataArray, da_obs: xr.DataArray, out
     # save score to netCDF-file
     score_dict = {"rmse": rmse, "mae": mae, **dict(zip(ets_name, ets_all))}
     ds_scores = xr.Dataset(score_dict)
-    fname_scores = outdir.joinpath(f"scores_imerg_wgan_{fname_suffix}.nc")
+    fname_scores = outdir.joinpath(f"scores_imerg_{model_name.lower()}_{fname_suffix}.nc")
     print(f"Save scores to '{fname_scores}'.")
-    ds_scores.to_netcdf(outdir.joinpath(f"scores_imerg_wgan_{fname_suffix}.nc"))
+    ds_scores.to_netcdf(fname_scores)
 
     ### Produce histograms
     hist_kwargs = eval_dict["histogram"]
-    plot_histogram(da_fcst, da_obs, outdir.joinpath(f"plot_histogram_imerg_wgan_{fname_suffix}_precip.png"), lshow=True, 
+    plot_histogram(da_fcst, da_obs, outdir.joinpath(f"plot_histogram_imerg_{model_name.lower()}_{fname_suffix}_precip.png"), lshow=True, 
                   **hist_kwargs)
 
     ### Create comparison plots
@@ -91,19 +99,31 @@ def eval_deterministic_forecast(da_fcst: xr.DataArray, da_obs: xr.DataArray, out
         da_fcst_now = da_fcst.isel({"time": i})
         time_str = pd.to_datetime(da_fcst_now['time'].values).strftime('%Y%m%d-%H00')
         plt_config["titles"] = ["IMERG", title_model]
-        plt_fname = outdir.joinpath(f"plot_imerg_wgan_{fname_suffix}_precip_{time_str}.png")
+        plt_fname = outdir.joinpath(f"plot_imerg_{model_name.lower()}_{fname_suffix}_precip_{time_str}.png")
         
         mapplot_comparison_det(da_obs.isel({"time": i}), da_fcst_now, plt_fname, lshow=True, **plt_config.copy())
 
 
-def eval_probablistic_forecast(da_fcst: xr.DataArray, da_obs: xr.DataArray, outdir: str_or_path,
-                               eval_dict : Dict = {"scores": {}, 
-                                                   "histogram": {"legend_labels": ["Harris WGAN", "IMERG"],
-                                                                 "bins": np.array([0., .01, 0.1, 0.5, 1., 2., 5., 10., 15., 20]), "figsize": (12, 8)}, 
-                                                  "comparison_map": {"nsamples_plot": 10, "nens": 3, "cmap_name": "PuOr", "cmap_range": (.5, 1.), 
-                                                                     "levels": [0., 0.25, 0.5, 1., 1.5, 2.5, 5., 7.5, 10., 15., 20., 30., 50., 75.]}
-                                                  }):
-    
+def eval_probablistic_downscaling(da_fcst: xr.DataArray, da_obs: xr.DataArray, outdir: str_or_path, model_name: str = "Harris WGAN", ens_dim: str = "ens",
+                                  eval_dict : Dict = {"scores": {}, 
+                                                      "histogram": {"legend_labels": ["Harris WGAN", "IMERG"],
+                                                                    "bins": np.array([0., .01, 0.1, 0.5, 1., 2., 5., 10., 15., 20]), "figsize": (12, 8)}, 
+                                                      "comparison_map": {"nsamples_plot": 10, "nens": 3, "cmap_name": "PuOr", "cmap_range": (.5, 1.), 
+                                                                         "levels": [0., 0.25, 0.5, 1., 1.5, 2.5, 5., 7.5, 10., 15., 20., 30., 50., 75.]}
+                                                     }):
+    """
+    Perform a probablistic downscaling evaluation which involves the following:
+    * basic scores: CRPS, rank histogram
+    * histograms
+    * comparison plot
+    Can be used for evaluating the ensemble mean or specific ensemble members.
+    :param da_fcst: Data array providing deterministic forecasts
+    :param da_obs: Data array providing the ground truth data/observation
+    :param outdir: Base directory to store evaluation plots and data
+    :param model_name: Name of the model
+    :param ens_dim: name of ensemble dimension
+    :param eval_dict: Nested dictionary with sub-dictionaries for scores, histogram, comparison_map
+    """
     outdir = Path(outdir) if not isinstance(outdir, Path) else outdir
 
     fname_suffix = "ensemble" 
@@ -121,19 +141,19 @@ def eval_probablistic_forecast(da_fcst: xr.DataArray, da_obs: xr.DataArray, outd
     rank_norm = score_engine("rank_histogram")
     
     # Plot normalized rank histogram    
-    plot_rank_histogram(rank_norm, outdir.joinpath(f"rank_histogram_wgan_{fname_suffix}"), **score_dict)
+    plot_rank_histogram(rank_norm, outdir.joinpath(f"rank_histogram_{model_name.lower()}_{fname_suffix}"), **score_dict)
 
     # save score to netCDF-file
     score_dict = {"crps": crps, "normalized_rank": rank_norm}
     ds_scores = xr.Dataset(score_dict)
     fname_scores = outdir.joinpath(f"scores_imerg_wgan_{fname_suffix}.nc")
     print(f"Save scores to '{fname_scores}'.")
-    ds_scores.to_netcdf(outdir.joinpath(f"scores_imerg_wgan_{fname_suffix}.nc"))
+    ds_scores.to_netcdf(outdir.joinpath(f"scores_imerg_{model_name.lower()}_{fname_suffix}.nc"))
 
     ### Produce histograms
     hist_kwargs = eval_dict["histogram"]
-    plot_histogram(da_fcst, da_obs, outdir.joinpath(f"plot_histogram_imerg_wgan_{fname_suffix}_precip.png"), 
-                   lshow=True, **hist_kwargs)
+    plot_histogram(da_fcst, da_obs, outdir.joinpath(f"plot_histogram_imerg_{model_name.lower()}_{fname_suffix}_precip.png"), 
+                   lshow=False, **hist_kwargs)
 
     ### Create comparison plots
     nsamples_plt = min(eval_dict["comparison_map"].pop("nsamples_plot", 10), nsamples)
@@ -143,7 +163,7 @@ def eval_probablistic_forecast(da_fcst: xr.DataArray, da_obs: xr.DataArray, outd
         da_fcst_now = da_fcst.isel({"time": i})
         date_now = pd.to_datetime(da_fcst_now['time'].values)
         plt_config["sup_title"] = f"{date_now.strftime('%Y/%m/%d %H:00')} UTC"
-        plt_config["titles"] = ["IMERG"] + [f"Harris WGAN ens={ens:d}" for ens in range(plt_config["nens"])]
-        plt_fname = outdir.joinpath(f"plot_imerg_wgan_{fname_suffix}_precip_{date_now.strftime('%Y%m%d-%H00')}.png")
+        plt_config["titles"] = ["IMERG"] + [f"{model_name} ens={ens:d}" for ens in range(plt_config["nens"])]
+        plt_fname = outdir.joinpath(f"plot_imerg_{model_name.lower()}_{fname_suffix}_precip_{date_now.strftime('%Y%m%d-%H00')}.png")
         
-        mapplot_comparison_ens(da_obs.isel({"time": i}), da_fcst_now, plt_fname, lshow=True, **plt_config)
+        mapplot_comparison_ens(da_obs.isel({"time": i}), da_fcst_now, plt_fname, lshow=False, **plt_config)

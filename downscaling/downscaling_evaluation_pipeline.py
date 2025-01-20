@@ -6,7 +6,7 @@
 __authors__ = "Michael Langguth"
 __email__ = "m.langguth@fz-juelich.de"
 __date__ = "2024-12-16"
-__update__ = "2025-01-13"
+__update__ = "2025-01-20"
 
 """
 Main script to run evaluation pipeline for downscaling application.
@@ -20,7 +20,7 @@ from functools import partial
 import numpy as np
 import xarray as xr
 
-from downscaling_evaluation_utils import eval_deterministic_forecast, eval_probablistic_forecast, _extract_ens_mem, get_month_from_nc_fname
+from downscaling_evaluation_utils import eval_deterministic_downscaling, eval_probablistic_downscaling, _extract_ens_mem, get_month_from_nc_fname
 
 str_or_path = Union[str, Path]
 
@@ -71,9 +71,9 @@ def main(parser_args):
 
     # run evaluation depending on ensemble type
     if ens == "mean" or isinstance(ens, int):
-        eval_deterministic_forecast(ds[var_fcst], ds["tot_prec_ref"], outdir=outdir)
+        eval_deterministic_downscaling(ds[var_fcst], ds["tot_prec_ref"], outdir=outdir)
     else:
-        eval_probablistic_forecast(ds[var_fcst], ds["tot_prec_ref"], outdir=outdir)
+        eval_probablistic_donwscaling(ds[var_fcst], ds["tot_prec_ref"], outdir=outdir)
 
 if __name__ == "__main__":
     import argparse
