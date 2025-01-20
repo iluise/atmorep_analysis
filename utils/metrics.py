@@ -142,7 +142,7 @@ class Scores:
     Class to calculate scores and skill scores.
     """
 
-    def __init__(self, data_fcst: xr.DataArray, data_ref: xr.DataArray, data_ens: xr.DataArray,  avg_dims: str_or_list = "all", ens_dim: str = "ens"):
+    def __init__(self, data_fcst: xr.DataArray, data_ref: xr.DataArray,  avg_dims: str_or_list = "all", ens_dim: str = "ens"):
         """
         :param data_fcst: forecast data to evaluate 
         :param data_ref: reference or ground truth data
@@ -155,8 +155,10 @@ class Scores:
                                 "acc": self.calc_acc, "bias": self.calc_bias, "spread" : self.calc_spread, 
                                 "ssr": self.calc_ssr, "grad_amplitude": self.calc_spatial_variability,
                                 "psnr": self.calc_psnr, "iqd": self.calc_iqd, "seeps": self.calc_seeps} 
-        self.prob_metrics_dict = {"crps": self.calc_seeps, "rank_histoogram": self.calc_rank_histogram}
+        self.prob_metrics_dict = {"crps": self.calc_crps, "rank_histogram": self.calc_rank_histogram}
         
+        self.ens_dim = ens_dim
+        self.data_fcst = data_fcst
         self.ens_dim = ens_dim
         self.prob_fcst = True if self.ens_dim in self.data_fcst.dims else False
         self.joint_data_dims = [dim for dim in self.data_fcst.dims if dim != self.ens_dim]    # excludes ensemble-dimension for probablistic forecasts
@@ -580,7 +582,7 @@ class Scores:
         """
         crps_methods = ["ensemble", "gaussian"]
 
-        assert "ens" in self.data_fcst.dims, "Forecast data array must have an 'ens'-dimension."
+        assert self.ens_dim in self.data_fcst.dims, "Forecast data array must have an 'ens'-dimension."
 
         if method == "ensemble":
             func_kwargs = {"forecasts": self.data_fcst, "member_dim": self.ens_dim, "dim": self.avg_dims, **kwargs}
@@ -605,8 +607,6 @@ class Scores:
         obs_stacked = self.data_ref.stack({"npoints": self.avg_dims})
         fcst_stacked = self.data_fcst.stack({"npoints": self.avg_dims})
 
-        print(fcst_stacked)
-
         # add noise to data if desired
         if add_noise:
             if obs_stacked.chunks is None and fcst_stacked.chunks is None:
@@ -621,7 +621,7 @@ class Scores:
                 fcst_stacked += da.random.random(size=fcst_stacked.shape, chunks=fcst_stacked.chunks)*noise_fac
 
         # calculate ranks for all data points 
-        rank = (obs_stacked >= fcst_stacked).sum(dim='ens')
+        rank = (obs_stacked >= fcst_stacked).sum(dim=self.ens_dim)
         # and count occurence of rank values
         rank.name = "rank"                      # name for xr.DataArray is required for histogram-method
         rank_counts = histogram(rank, dim=["npoints"], bins=np.arange(len(fcst_stacked[self.ens_dim]) + 2), 
