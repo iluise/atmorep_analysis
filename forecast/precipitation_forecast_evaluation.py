@@ -13,6 +13,7 @@ Main script to run evaluation pipeline for precipitation forecasts.
 """
 
 # import packages
+import argparse
 from pathlib import Path
 import glob
 from typing import Union, List, Dict
@@ -102,13 +103,25 @@ def main(parser_args):
         
 
 if __name__ == "__main__":
-    import argparse
+
+    # helping for parsing
+    def parse_ens(value):
+        # Try to parse the input as an integer
+        try:
+            return int(value)
+        except ValueError:
+            # If it's not an integer, check if it's a valid string option
+            if value in {"mean", "all"}:
+                return value
+            # Raise an error if it's neither
+            raise argparse.ArgumentTypeError(f"Invalid value for --ens: {value}. Choose 'mean', 'all', or an integer.")
+
 
     parser = argparse.ArgumentParser(description="Run evaluation pipeline for precipitation forecasts.")
     parser.add_argument("--datadir", type=Path, help="Directory containing forecast data.")
     parser.add_argument("--outdir", type=Path, help="Directory to store evaluation results.")
     parser.add_argument("--model_id", type=str, default="netcdf", help="W&B ID of AtmoRep evaluation run.")
-    parser.add_argument("--ens", type=Union[str, int], default="all", help="Type of ensemble to evaluate. Choose between 'mean', 'all', <int>.")
+    parser.add_argument("--ens", type=parse_ens, default="all", help="Type of ensemble to evaluate. Choose between 'mean', 'all', <int>.")
     parser.add_argument("--quick_evaluate", action="store_true", help="Quick evaluation with reduced number of samples.")
     parser.add_argument("--nforecasts_quick", type=int, default=10, help="Number of forecasts for quick evaluation.")
     parser.add_argument("--seed", type=int, default=42, help="Seed for random number generator.")
