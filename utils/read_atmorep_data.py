@@ -174,6 +174,10 @@ class HandleAtmoRepData(object):
         da = []
         for _, patch in enumerate(grouped_store[os.path.join(varname)]):    
             coords.update({dim: grouped_store[os.path.join(varname, patch, dim)] for dim in dims})
+            # hard-coded fix for surface data: overwirte ml-coordinate
+            if varname == "total_precip":
+                coords["ml"] = coords["ml"][-1:]
+
             da_p = xr.DataArray(grouped_store[os.path.join(varname, patch, "data")], coords=coords,                
                                 dims = ["ensemble"] + dims if data_type == "ens" else dims, name=f"{varname}_{patch.replace('=', '')}")
             # split datetime-dimension to (init_time, lead_time)
