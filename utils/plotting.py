@@ -37,7 +37,7 @@ import cartopy
 import cartopy.crs as ccrs  #https://scitools.org.uk/cartopy/docs/latest/installing.html
 from cartopy.mpl.ticker import LongitudeFormatter, LatitudeFormatter
 import cartopy.feature as cfeature
-from analysis.utils.utils import get_units
+from utils.utils import get_units
 # auxiliary variable for logger
 module_name = os.path.basename(__file__).rstrip(".py")
 
@@ -440,7 +440,7 @@ def mapplot_comparison_ens(data_ref: xr.DataArray, data_fcst: xr.DataArray, plt_
         gl.right_labels = False
         gl.top_labels = False
 
-        data = data_ref if idx == 0 else data_fcst.isel({"ens": idx - 1})
+        data = data_ref if idx == 0 else data_fcst.isel({ens_name: idx - 1})
         
         # Plot the data using contourf
         contour = ax.contourf(data["lon"], data["lat"], data, transform=transform,
