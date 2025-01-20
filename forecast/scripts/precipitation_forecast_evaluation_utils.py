@@ -13,6 +13,8 @@ Methods used in the evaluation pipeline for precipitation forecasts.
 """
 
 # import packages
+import sys
+sys.path.append("../")
 from pathlib import Path
 from typing import Union, List, Dict
 import numpy as np
@@ -97,7 +99,7 @@ def eval_deterministic_forecast(da_fcst: xr.DataArray, da_obs: xr.DataArray, out
 
     ### Produce histograms
     hist_kwargs = eval_dict["histogram"]
-    plot_histogram(da_fcst, da_obs, outdir.joinpath(f"plot_histogram_imerg_{model_name.lower()}_{fname_suffix}_precip.png"), lshow=True, 
+    plot_histogram(da_fcst, da_obs, outdir.joinpath(f"plot_histogram_imerg_{model_name.lower()}_{fname_suffix}_precip.png"), lshow=False,
                   **hist_kwargs)
 
     ### Create comparison plots
@@ -114,7 +116,7 @@ def eval_deterministic_forecast(da_fcst: xr.DataArray, da_obs: xr.DataArray, out
                                         f"{init_now.strftime('%Y%m%d-%H00')}+{int(lead_time):03d}.png")
         
             mapplot_comparison_det(da_obs.isel({"init_time": i,}).sel({"lead_time": lead_time}), da_fcst_now,
-                                   plt_fname, lshow=True, **plt_config.copy())
+                                   plt_fname, lshow=False, **plt_config.copy())
             
 
 def eval_probablistic_forecast(da_fcst: xr.DataArray, da_obs: xr.DataArray, outdir: str_or_path, model_name: str = "AtmoRep", ens_dim : str ="ens",
@@ -147,6 +149,8 @@ def eval_probablistic_forecast(da_fcst: xr.DataArray, da_obs: xr.DataArray, outd
     score_engine = Scores(da_fcst, da_obs, avg_dims=["init_time", "lat", "lon"], ens_dim=ens_dim)
 
     crps = score_engine("crps")
+    print(f"Lead-time averaged CRPS over {nforecasts:d} forecasts: {crps.mean():.4f} mm/h.")
+    
     plot_metric_line(crps, model_name, metric = {"crps": "mm/h"}, value_range = score_dict.pop("val_range", [.0, .1]),
                      plt_fname=outdir.joinpath(f"plot_crps_{model_name.lower()}_precip.png"))
 
@@ -161,7 +165,7 @@ def eval_probablistic_forecast(da_fcst: xr.DataArray, da_obs: xr.DataArray, outd
     ### Produce histogram
     hist_kwargs = eval_dict["histogram"]
     plot_histogram(da_fcst, da_obs, outdir.joinpath(f"plot_histogram_imerg_{model_name}_{fname_suffix}_precip.png"), 
-                   ens_dim = ens_dim, lshow=True, **hist_kwargs)
+                   ens_dim = ens_dim, lshow=False, **hist_kwargs)
 
     ### Create comparison plots
     nfcst_plt = min(eval_dict["comparison_map"].pop("nforecasts_plot", 10), nforecasts)
@@ -176,8 +180,8 @@ def eval_probablistic_forecast(da_fcst: xr.DataArray, da_obs: xr.DataArray, outd
             plt_fname = outdir.joinpath(f"plot_imerg_{model_name.lower()}_{fname_suffix}_precip_"+
                                         f"{init_now.strftime('%Y%m%d-%H00')}+{int(lead_time):03d}.png")
         
-            mapplot_comparison_ens(da_obs.isel({"init_time": i,}).sel({"lead_time": lead_time}), da_fcst_now,
-                                   plt_fname, lshow=True, ens_dim=ens_dim, **plt_config)
+            mapplot_comparison_ens(da_obs.isel({"init_time": i,}).sel({"lead_time": lead_time}), da_fcst_now, plt_fname,
+                                   ens_name=ens_dim, lshow=False, ens_dim=ens_dim, **plt_config)
 
 def convert_to_datetime(time_obj):
     """
