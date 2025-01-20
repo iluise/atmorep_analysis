@@ -152,7 +152,6 @@ class Scores:
     """
     Class to calculate scores and skill scores.
     """
-
     def __init__(self, data_fcst: xr.DataArray, data_ref: xr.DataArray, avg_dims: str_or_list = "all", ens_dim: str = "ens"):
         """
         :param data_fcst: forecast data to evaluate 
@@ -164,13 +163,11 @@ class Scores:
         self.det_metrics_dict = {"ets": self.calc_ets, "pss": self.calc_pss, "fbi": self.calc_fbi,
                                  "mae": self.calc_mae, "l1": self.calc_l1, "l2": self.calc_l2, 
                                  "mse": self.calc_mse, "rmse": self.calc_rmse, "bias": self.calc_bias,
-                                 "acc": self.calc_acc, "bias": self.calc_bias, "ssr": self.calc_ssr,
-                                 "grad_amplitude": self.calc_spatial_variability, "psnr": self.calc_psnr, 
-                                 "iqd": self.calc_iqd, "seeps": self.calc_seeps} 
+                                 "acc": self.calc_acc, "bias": self.calc_bias, "spread" : self.calc_spread, 
+                                 "ssr": self.calc_ssr, "grad_amplitude": self.calc_spatial_variability,
+                                 "psnr": self.calc_psnr, "iqd": self.calc_iqd, "seeps": self.calc_seeps} 
         self.prob_metrics_dict = {"crps": self.calc_crps, "rank_histogram": self.calc_rank_histogram}
-
-        self.data_fcst = data_fcst
-        self.ens_dim = ens_dim
+        
         self.data_fcst = data_fcst
         self.ens_dim = ens_dim
         self.prob_fcst = True if self.ens_dim in self.data_fcst.dims else False
@@ -614,7 +611,6 @@ class Scores:
         :param add_noise: Add unsignificant amount of random noise to data for fair computations, cf. Sec. 4.2.2 in Harris et al. 2022
         :param noise_fac: magnitude of random noise (only relevant if add_noise == True)
         """
-        # stack data along averaging dimensions
 
         # unstack stacked time-dimension beforehand if required (time may be stacked for forecast data)
         data_ref = self.data_ref
