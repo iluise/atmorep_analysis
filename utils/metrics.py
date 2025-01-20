@@ -142,28 +142,28 @@ class Scores:
     Class to calculate scores and skill scores.
     """
 
-    def __init__(self, data_fcst: xr.DataArray, data_ref: xr.DataArray,  avg_dims: str_or_list = "all", ens_dim: str = "ens"):
+    def __init__(self, data_fcst: xr.DataArray, data_ref: xr.DataArray, avg_dims: str_or_list = "all", ens_dim: str = "ens"):
         """
         :param data_fcst: forecast data to evaluate 
         :param data_ref: reference or ground truth data
         :param avg_dims: dimension or list of dimensions over which scores shall be averaged. 
                          Parse 'all' to average over all data dimensions.
+        :param ens_dim: name of ensemble meber dimension in data_fcst. Ignored if determinsitic forecast is processed.
         """
         self.det_metrics_dict = {"ets": self.calc_ets, "pss": self.calc_pss, "fbi": self.calc_fbi,
-                                "mae": self.calc_mae, "l1": self.calc_l1, "l2": self.calc_l2, 
-                                "mse": self.calc_mse, "rmse": self.calc_rmse, "bias": self.calc_bias,
-                                "acc": self.calc_acc, "bias": self.calc_bias, "spread" : self.calc_spread, 
-                                "ssr": self.calc_ssr, "grad_amplitude": self.calc_spatial_variability,
-                                "psnr": self.calc_psnr, "iqd": self.calc_iqd, "seeps": self.calc_seeps} 
+                                 "mae": self.calc_mae, "l1": self.calc_l1, "l2": self.calc_l2, 
+                                 "mse": self.calc_mse, "rmse": self.calc_rmse, "bias": self.calc_bias,
+                                 "acc": self.calc_acc, "bias": self.calc_bias, "ssr": self.calc_ssr,
+                                 "grad_amplitude": self.calc_spatial_variability, "psnr": self.calc_psnr, 
+                                 "iqd": self.calc_iqd, "seeps": self.calc_seeps} 
         self.prob_metrics_dict = {"crps": self.calc_crps, "rank_histogram": self.calc_rank_histogram}
-        
-        self.ens_dim = ens_dim
+
         self.data_fcst = data_fcst
         self.ens_dim = ens_dim
         self.prob_fcst = True if self.ens_dim in self.data_fcst.dims else False
         self.joint_data_dims = [dim for dim in self.data_fcst.dims if dim != self.ens_dim]    # excludes ensemble-dimension for probablistic forecasts
         self.data_ref = data_ref
-
+        
         self.avg_dims = avg_dims
 
         self.metrics_dict = self.prob_metrics_dict if self.prob_fcst else self.det_metrics_dict
@@ -344,7 +344,7 @@ class Scores:
 
         return rmse
     
-    def calc_acc(self, **kwargs):
+    def calc_acc(self, clim_mean: xr.DataArray, spatial_dims: List = ["lat", "lon"]):
         """
         Calculate anomaly correlation coefficient (ACC).
         :param clim_mean: climatological mean of the data
@@ -352,12 +352,10 @@ class Scores:
                              Note: No averaging is possible over these dimensions.
         :return acc: Averaged ACC (except over spatial_dims)
         """
-        clim_mean = kwargs.get("clim_mean", None)   
-        spatial_dims = kwargs.get("spatial_dims", ["lat", "lon"])
 
-        #fcst_ano, obs_ano = self.data_fcst - clim_mean, self.data_ref - clim_mean
+        fcst_ano, obs_ano = self.data_fcst - clim_mean, self.data_ref - clim_mean
 
-        acc = ((self.data_fcst - clim_mean)*(self.data_ref - clim_mean)).sum(spatial_dims)/np.sqrt(((self.data_fcst - clim_mean)**2).sum(spatial_dims)*((self.data_ref - clim_mean)**2).sum(spatial_dims))
+        acc = (fcst_ano*obs_ano).sum(spatial_dims)/np.sqrt(fcst_ano.sum(spatial_dims)*obs_ano.sum(spatial_dims))
 
         if self.avg_dims is not None:
             mean_dims = [x for x in self.avg_dims if x not in spatial_dims]
@@ -365,7 +363,7 @@ class Scores:
                 acc = acc.mean(mean_dims)
 
         return acc
-
+    
     def calc_spread(self, **kwargs):
         """
         Calculate the spread of the forecast ensemble 
@@ -570,7 +568,7 @@ class Scores:
             seeps_values = seeps_values_all
 
         return seeps_values
-    
+
     ### Probablistic scores
     def calc_crps(self, method: str="ensemble", **kwargs):
         """
@@ -604,8 +602,21 @@ class Scores:
         :param noise_fac: magnitude of random noise (only relevant if add_noise == True)
         """
         # stack data along averaging dimensions
-        obs_stacked = self.data_ref.stack({"npoints": self.avg_dims})
-        fcst_stacked = self.data_fcst.stack({"npoints": self.avg_dims})
+
+        # unstack stacked time-dimension beforehand if required (time may be stacked for forecast data)
+        data_ref = self.data_ref
+        if "time" in self.data_ref.indexes:
+            if isinstance(self.data_ref.indexes['time'], pd.MultiIndex):
+                data_ref = self.data_ref.reset_index("time")
+
+        data_fcst = self.data_fcst
+        if "time" in self.data_fcst.indexes:
+            if isinstance(self.data_fcst.indexes['time'], pd.MultiIndex):
+                data_fcst = self.data_fcst.reset_index("time")
+
+        # perform the stacking
+        obs_stacked = data_ref.stack({"npoints": self.avg_dims})
+        fcst_stacked = data_fcst.stack({"npoints": self.avg_dims})
 
         # add noise to data if desired
         if add_noise:
@@ -633,6 +644,19 @@ class Scores:
             rank_counts = rank_counts/npoints 
         
         return rank_counts
+    
+    def calc_rank_histogram_xskillscore(self, **kwargs):
+        """
+        Wrapper around rank_histogram-method by xskillscore-package.
+        See https://xskillscore.readthedocs.io/en/stable/api
+        Note: this version is found to be very slow. Use calc_rank_histogram alternatively.
+        """
+        if kwargs:
+            print("Passed keyword arguments to calc_rank_historam are without effect.")
+
+        rank_hist = xskillscore.rank_histogram(self.data_ref, self.data_fcst, member_dim=self.ens_dim, dim=self.avg_dims)
+
+        return rank_hist
     
     @staticmethod
     def calc_geo_spatial_diff(scalar_field: xr.DataArray, order: int = 1, r_e: float = 6371.e3, dom_avg: bool = True):
