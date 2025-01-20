@@ -259,8 +259,7 @@ class HandleAtmoRepData(object):
 
         return da
     
-    @staticmethod
-    def get_global_field(da_list):
+    def get_global_field(self, da_list):
         
         # get resolution from data
         all_init_times = list(set([time for da in da_list for time in da["init_time"].values]))
@@ -268,10 +267,26 @@ class HandleAtmoRepData(object):
                  np.abs(da_list[0]["lat"][1] - da_list[0]["lat"][0])
         
         # initialize empty global data array
+        if "lat_lon_domain" in self.config.keys():   # evaluation was run over limited area
+            lonlim = np.array(self.config["lat_lon_domain"][1])
+            offset = 0.
+            if lonlim[0] > lonlim[1]: offset = 360.
+                
+            lons = np.arange(lonlim[0], lonlim[1] + offset + dx/2., dx)
+            lons = np.where(lons >= 360., lons-360., lons)
+            
+            
+            latlim = np.sort(-np.array(self.config["lat_lon_domain"][0]) + 90.)
+            lats = np.arange(latlim[0], latlim[1] + dy/2., dy)
+        else:
+            lats = np.linspace(-90., 90., num=int(180/dy) + 1, endpoint=True)
+            lons = np.linspace(0, 360, num=int(360/dx), endpoint=False)  
+
+        # initialize empty global data array
         dims = da_list[0].dims
         data_coords = {dim: da_list[0].coords[dim] for dim in dims if dim not in ["lat", "lon"]}
-        data_coords["lat"] = np.linspace(-90., 90., num=int(180/dy) + 1, endpoint=True)
-        data_coords["lon"] = np.linspace(0, 360, num=int(360/dx), endpoint=False)  
+        data_coords["lat"] = lats
+        data_coords["lon"] = lons
         data_coords["init_time"] = all_init_times
 
         da_global = xr.DataArray(np.empty(tuple(len(d) for d in data_coords.values())), 
