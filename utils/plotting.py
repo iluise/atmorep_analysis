@@ -7,7 +7,7 @@
 __authors__ = "Ilaria Luise, Michael Langguth"
 __email__ = "ilaria.luise@cern.ch"
 __date__ = "2023-12-20"
-__update__ = "2025-01-13"
+__update__ = "2025-01-20"
 
 """
 Methods for creating plots.
@@ -332,8 +332,58 @@ def save_ims( dir_out, field, data, name, min_val = 1., max_val = -1.) :
     # print( 'Finished saving figures for step={}, tidx = {}.'.format( epoch, tidx) )
 
 ##############################################
-# Plot routines used in the downscaling evaluation pipeline
+# Plot routines used in the precipitation forecast and downscaling evaluation pipeline
 ##############################################
+
+def plot_metric_line(data: xr.DataArray, model_name: str, metric: dict,
+                     plt_fname: str, varname: str = "tot_prec", x_coord: str = "lead_time", **kwargs):
+    """
+    Create line plots of 2D-metric data (e.g. metric plotted against time) 
+    :param data: DataArray containing the mean values
+    :param data_up: DataArray containing the upper error bounds
+    :param data_down: DataArray containing the lower error bounds
+    :param model_name: Name of model
+    :param metric: Dictionary containing metric name and unit 
+    :param plt_fname: File name of plot
+    :param varname: Name of variable that was evaluated
+    :param x_coord: Name of coordinate along which metric is plotted
+    :param kwargs: Keyword arguments for plotting
+                   Valid keys are:
+                    - "linestyle": linestyle of plot, default: "k-"
+                    - "error_color": color of error bounds, default: "blue"
+                    - "value_range": range of y-axis, default: (0., 4.)
+                    - "fs": font size of labels, default: 16
+                    - "ref_line": reference line to be plotted, default: None
+                    - "ref_linestyle": linestyle of reference line, default: "k--"
+                    - other valid arguments of ax.plot
+    """
+    # get some plot parameters
+    figsize = kwargs.pop("figsize", (9, 6))
+    linestyle = kwargs.pop("linestyle", "k-")
+    val_range = kwargs.pop("value_range", (0., 4.))
+    fs = kwargs.pop("fs", 16)
+    ref_line = kwargs.pop("ref_line", None)
+    ref_linestyle = kwargs.pop("ref_linestyle", "k--")
+    
+    fig, (ax) = plt.subplots(1, 1, figsize=figsize)
+    ax.plot(data[x_coord].values, data.values, linestyle, label=model_name, **kwargs)
+    
+    if ref_line is not None:
+        nval = np.shape(data[x_coord].values)[0]
+        ax.plot(data[x_coord].values, np.full(nval, ref_line), ref_linestyle)
+    ax.set_ylim(*val_range)
+    # label axis
+    ax.set_xlabel("lead time [h]", fontsize=fs)
+    metric_name, metric_unit = list(metric.keys())[0], list(metric.values())[0]
+    ax.set_ylabel(f"{metric_name} {varname} [{metric_unit}]", fontsize=fs)
+    ax.tick_params(axis="both", which="both", direction="out", labelsize=fs-2)
+
+    # save plot and close figure
+    plt_fname = Path(plt_fname)
+    plt_fname = plt_fname + ".png" if not plt_fname.suffix == ".png" else plt_fname
+    print(f"Save plot in file '{plt_fname}'")
+    fig.savefig(plt_fname, bbox_inches="tight")
+    plt.close(fig)
 
 def mapplot_comparison_ens(data_ref: xr.DataArray, data_fcst: xr.DataArray, plt_fname: str_or_path, lshow: bool=True,
                            ens_name: str = "ens", **plt_kwargs):
