@@ -6,11 +6,7 @@
 __authors__ = "Michael Langguth"
 __email__ = "m.langguth@fz-juelich.de"
 __date__ = "2023-07"
-<<<<<<< HEAD
-__update__ = "2025-01-13"
-=======
 __update__ = "2025-01-20"
->>>>>>> michael/issue_5_evaluation_pipeline_downscaling/issue_6_add_probablistic_scores
 
 """
 Collection of useful metrics to evaluate the performance of the predictions
@@ -31,10 +27,7 @@ except:
     l_tqdm = False
 
 import dask.array as da
-<<<<<<< HEAD
-=======
 import pandas as pd
->>>>>>> michael/issue_5_evaluation_pipeline_downscaling/issue_6_add_probablistic_scores
 import xarray as xr
 import numpy as np
 from typing import Union, List
@@ -159,16 +152,7 @@ class Scores:
     """
     Class to calculate scores and skill scores.
     """
-
-<<<<<<< HEAD
-<<<<<<< HEAD
-    def __init__(self, data_fcst: xr.DataArray, data_ref: xr.DataArray,  avg_dims: str_or_list = "all", ens_dim: str = "ens"):
-=======
     def __init__(self, data_fcst: xr.DataArray, data_ref: xr.DataArray, avg_dims: str_or_list = "all", ens_dim: str = "ens"):
->>>>>>> michael/issue_5_evaluation_pipeline_downscaling/issue_6_add_probablistic_scores
-=======
-    def __init__(self, data_fcst: xr.DataArray, data_ref: xr.DataArray, avg_dims: str_or_list = "all", ens_dim: str = "ens"):
->>>>>>> michael/issue_5_evaluation_pipeline_downscaling/issue_6_add_probablistic_scores
         """
         :param data_fcst: forecast data to evaluate 
         :param data_ref: reference or ground truth data
@@ -177,31 +161,13 @@ class Scores:
         :param ens_dim: name of ensemble meber dimension in data_fcst. Ignored if determinsitic forecast is processed.
         """
         self.det_metrics_dict = {"ets": self.calc_ets, "pss": self.calc_pss, "fbi": self.calc_fbi,
-<<<<<<< HEAD
-<<<<<<< HEAD
-                                "mae": self.calc_mae, "l1": self.calc_l1, "l2": self.calc_l2, 
-                                "mse": self.calc_mse, "rmse": self.calc_rmse, "bias": self.calc_bias,
-                                "acc": self.calc_acc, "bias": self.calc_bias, "spread" : self.calc_spread, 
-                                "ssr": self.calc_ssr, "grad_amplitude": self.calc_spatial_variability,
-                                "psnr": self.calc_psnr, "iqd": self.calc_iqd, "seeps": self.calc_seeps} 
-        self.prob_metrics_dict = {"crps": self.calc_crps, "rank_histogram": self.calc_rank_histogram}
-        
-=======
-=======
->>>>>>> michael/issue_5_evaluation_pipeline_downscaling/issue_6_add_probablistic_scores
                                  "mae": self.calc_mae, "l1": self.calc_l1, "l2": self.calc_l2, 
                                  "mse": self.calc_mse, "rmse": self.calc_rmse, "bias": self.calc_bias,
-                                 "acc": self.calc_acc, "bias": self.calc_bias, "ssr": self.calc_ssr,
-                                 "grad_amplitude": self.calc_spatial_variability, "psnr": self.calc_psnr, 
-                                 "iqd": self.calc_iqd, "seeps": self.calc_seeps} 
+                                 "acc": self.calc_acc, "bias": self.calc_bias, "spread" : self.calc_spread, 
+                                 "ssr": self.calc_ssr, "grad_amplitude": self.calc_spatial_variability,
+                                 "psnr": self.calc_psnr, "iqd": self.calc_iqd, "seeps": self.calc_seeps} 
         self.prob_metrics_dict = {"crps": self.calc_crps, "rank_histogram": self.calc_rank_histogram}
-
-        self.data_fcst = data_fcst
-<<<<<<< HEAD
->>>>>>> michael/issue_5_evaluation_pipeline_downscaling/issue_6_add_probablistic_scores
-=======
->>>>>>> michael/issue_5_evaluation_pipeline_downscaling/issue_6_add_probablistic_scores
-        self.ens_dim = ens_dim
+        
         self.data_fcst = data_fcst
         self.ens_dim = ens_dim
         self.prob_fcst = True if self.ens_dim in self.data_fcst.dims else False
@@ -645,35 +611,7 @@ class Scores:
         :param add_noise: Add unsignificant amount of random noise to data for fair computations, cf. Sec. 4.2.2 in Harris et al. 2022
         :param noise_fac: magnitude of random noise (only relevant if add_noise == True)
         """
-        # stack data along averaging dimensions
-<<<<<<< HEAD
-=======
 
-        # unstack stacked time-dimension beforehand if required (time may be stacked for forecast data)
-        data_ref = self.data_ref
-        if "time" in self.data_ref.indexes:
-            if isinstance(self.data_ref.indexes['time'], pd.MultiIndex):
-                data_ref = self.data_ref.reset_index("time")
-
-        data_fcst = self.data_fcst
-        if "time" in self.data_fcst.indexes:
-            if isinstance(self.data_fcst.indexes['time'], pd.MultiIndex):
-                data_fcst = self.data_fcst.reset_index("time")
-
-        # perform the stacking
-        obs_stacked = data_ref.stack({"npoints": self.avg_dims})
-        fcst_stacked = data_fcst.stack({"npoints": self.avg_dims})
->>>>>>> michael/issue_5_evaluation_pipeline_downscaling/issue_6_add_probablistic_scores
-
-<<<<<<< HEAD
-        # add noise to data if desired
-        if add_noise:
-<<<<<<< HEAD
-            rng = np.random.default_rng()
-    
-            obs_stacked += rng.random(size=obs_stacked.shape, dtype=np.float32)*noise_fac
-            fcst_stacked += rng.random(size=fcst_stacked.shape, dtype=np.float32)*noise_fac
-=======
         # unstack stacked time-dimension beforehand if required (time may be stacked for forecast data)
         data_ref = self.data_ref
         if "time" in self.data_ref.indexes:
@@ -691,8 +629,6 @@ class Scores:
 
         # add noise to data if desired
         if add_noise:
-=======
->>>>>>> michael/issue_5_evaluation_pipeline_downscaling/issue_6_add_probablistic_scores
             if obs_stacked.chunks is None and fcst_stacked.chunks is None:
                 # underlying arrays are numpy arrays -> use numpy's native random generator
                 rng = np.random.default_rng()
@@ -703,10 +639,6 @@ class Scores:
                 # underlying arrays are dask arrays -> use dask's random generator
                 obs_stacked += da.random.random(size=obs_stacked.shape, chunks=obs_stacked.chunks)*noise_fac
                 fcst_stacked += da.random.random(size=fcst_stacked.shape, chunks=fcst_stacked.chunks)*noise_fac
-<<<<<<< HEAD
->>>>>>> michael/issue_5_evaluation_pipeline_downscaling/issue_6_add_probablistic_scores
-=======
->>>>>>> michael/issue_5_evaluation_pipeline_downscaling/issue_6_add_probablistic_scores
 
         # calculate ranks for all data points 
         rank = (obs_stacked >= fcst_stacked).sum(dim=self.ens_dim)
